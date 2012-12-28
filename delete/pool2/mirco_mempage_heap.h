@@ -12,11 +12,9 @@
 struct chunk;
 struct mempage_heap;
 
-extern size_t chunk_size;
-
 struct mirco_mempage_heap {
 	struct mempage_heap * _father_heap;
-	struct chunk * chunk;
+	struct chunk * chunk[8];
 	boost::atomic_flag _flag;
 };
 

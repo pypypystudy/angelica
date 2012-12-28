@@ -5,22 +5,19 @@
  * chunk 
  */
 #include "chunk.h"
-#include "mempage_heap.h"
 #ifdef _WIN32
 #include <Windows.h>
 #endif //_WIN32
 
-struct chunk * _create_chunk(struct mempage_heap * _heap, size_t size){
+struct chunk * _create_chunk(size_t size){
 	size = (size + 4095)/4096*4096;
 #ifdef _WIN32
 	struct chunk * _chunk = (struct chunk*)VirtualAlloc(0, size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 #endif //_WIN32
 	_chunk->count.store(0);
-	_chunk->_heap = _heap;
 	_chunk->size = size;
 	_chunk->flag = _flag;
 	_chunk->rec_count = 0;
-	_chunk->rec_flag = 0;
 	_chunk->slide = sizeof(struct chunk);
 
 	return _chunk;
@@ -45,40 +42,17 @@ bool _isoldchunk(struct chunk * _chunk){
 	return (_chunk->rec_count > 3);
 }
 
-struct chunk * _merge_chunk(struct chunk * _c1, struct chunk * _c2){
-	struct chunk * ret = 0;
-	if ((char*)_c1 == ((char*)_c2 + _c2->size)){
-		ret = _c2;
-		ret->size += _c1->size;
-	}
-	else if (((char*)_c1 + _c1->size) == (char*)_c2){
-		ret = _c1;
-		ret->size += _c2->size;
-	}
-
-	return ret;
-}
-
 void * _malloc(struct chunk * _chunk, size_t size){
 	void * ret = 0;
 
-	while(1){
-		size_t newsize = sizeof(struct chunk*) + sizeof(size_t) + size;
-		struct chunk ** tmp = (struct chunk **)_brk(_chunk, newsize);
-		if (tmp != 0){
-			*tmp = _chunk;
-			size_t * _size = (size_t*)++tmp;
-			*_size = size;
-			ret = (void*)++_size;
-			_chunk->count++;
-			break;
-		}else{
-			if(_chunk->count.load() == 0){
-				_chunk->slide = sizeof(struct chunk);
-			}else{
-				break;
-			}
-		}
+	size_t newsize = sizeof(struct chunk*) + sizeof(size_t) + size;
+	struct chunk ** tmp = (struct chunk **)_brk(_chunk, newsize);
+	if (tmp != 0){
+		*tmp = _chunk;
+		size_t * _size = (size_t*)++tmp;
+		*_size = size;
+		ret = (void*)++_size;
+		_chunk->count++;
 	}
 
 	return ret;
@@ -87,7 +61,7 @@ void * _malloc(struct chunk * _chunk, size_t size){
 void * _realloc(void * mem, size_t size){
 	void * ret = 0;
 
-	struct chunk * _chunk = *(struct chunk **)((char*)mem - sizeof(size_t) - sizeof(struct chunk*));
+	struct chunk * _chunk = (struct chunk *)((char*)mem - sizeof(size_t) - sizeof(struct chunk));
 	if (_chunk->flag != _flag){
 		abort();
 	}
@@ -111,10 +85,5 @@ void _free(void * mem){
 	if (_chunk->flag != _flag){
 		abort();
 	}
-	if (--_chunk->count == 0){
-		char flag = 1;
-		if (_chunk->rec_flag.compare_exchange_weak(flag, 2)){
-			_recover_chunk(_chunk->_heap, _chunk);
-		}
-	}
+	_chunk->count--;
 }

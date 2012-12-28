@@ -16,25 +16,32 @@ struct mirco_mempage_heap;
 struct mempage_heap{
 	size_t concurrent_count;
 	mirco_mempage_heap * _heap;
-	struct chunk * _chunk;
+
+	boost::shared_mutex _recover_mu;
+	struct chunk ** _recover;
+	boost::atomic_uint _recover_slide;
+	unsigned int _recover_max;
+
+	boost::shared_mutex _old_recover_mu;
+	struct chunk ** _old_recover;
+	boost::atomic_uint _old_recover_slide;
+	unsigned int _old_recover_max;
 
 	boost::shared_mutex _free_mu;
 	struct chunk ** _free;
 	boost::atomic_uint _free_slide;
 	unsigned int _free_max;
+};
 
-	boost::atomic_flag _bigfree_flag;
-	struct chunk ** _bigfree;
-	boost::atomic_uint _bigfree_slide;
-	unsigned int _bigfree_max;
-
-};	
-	
 struct mempage_heap * _create_mempage_heap();
 void * _mempage_heap_alloc(struct mempage_heap * _heap, size_t size);
 void * _mempage_heap_realloc(struct mempage_heap * _heap, void * mem, size_t size);
 
-void _recover_chunk(struct mempage_heap * _heap, struct chunk * _chunk);
 struct chunk * _chunk(struct mempage_heap * _heap, size_t size);
+void _recover_chunk(struct mempage_heap * _heap, struct chunk * _chunk);	
+void _sweep(struct mempage_heap * _heap);
+void _resize_recvlist(struct mempage_heap * _heap);
+void _resize_freelist(struct mempage_heap * _heap);
+void _resize_oldrecvlist(struct mempage_heap * _heap);
 
 #endif //_MEMPAGE_HEAP_H
