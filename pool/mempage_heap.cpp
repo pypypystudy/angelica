@@ -49,7 +49,7 @@ struct mempage_heap * _create_mempage_heap(){
 
 	_heap->_bigfree = (struct chunk **)_malloc(_chunk, 4096);
 	::new (&_heap->_bigfree_flag) boost::atomic_flag();
-	_heap->_bigfree_slide.store(0);
+	_heap->_bigfree_slide = 0;
 	_heap->_bigfree_max = 4096/sizeof(struct chunk *);
 
 	return _heap;
@@ -123,12 +123,13 @@ struct chunk * _chunk_from_free(struct mempage_heap * _heap){
 
 	struct chunk * _chunk = 0;
 	unsigned int slide = _heap->_free_slide.load();
+	unsigned int newslide = 0;
 	while(1){
 		if (slide <= 0){
 			break;
 		}
 
-		unsigned int newslide = slide - 1;
+		newslide = slide - 1;
 		if (_heap->_free_slide.compare_exchange_strong(slide, newslide)){
 			_chunk = _heap->_free[newslide];
 			break;
@@ -143,9 +144,23 @@ struct chunk * _chunk_from_bigfree(struct mempage_heap * _heap, size_t size){
 	
 	struct chunk * _chunk = 0;
 	int slide = _bisearch(_heap, size);
+	unsigned int _oldslide = 0;
+
 	if (slide >= 0){
 		_chunk = _heap->_bigfree[slide];
 		_erase(_heap, slide);
+	}else{
+		_oldslide = _heap->_bigfree_slide;
+		if (_oldslide > _heap->concurrent_count){
+			_merge_bigfree(_heap);
+			if (_heap->_bigfree_slide < _oldslide){
+				slide = _bisearch(_heap, size);
+				if (slide >= 0){
+					_chunk = _heap->_bigfree[slide];
+					_erase(_heap, slide);
+				}
+			}
+		}
 	}
 
 	_heap->_bigfree_flag.clear();
@@ -162,8 +177,7 @@ void _recover_chunk(struct mempage_heap * _heap, struct chunk * _chunk){
 		_recover_to_free(_heap, _chunk);
 	}
 
-	size_t slide = _heap->_free_slide.load();
-	if (slide >= _heap->_free_max){
+	if (_heap->_free_slide.load() >= _heap->_free_max){
 		boost::unique_lock<boost::shared_mutex> uniquelock(_heap->_free_mu);
 		while(_heap->_bigfree_flag.test_and_set());
 		_merge(_heap);
@@ -178,8 +192,7 @@ void _recover_to_free(struct mempage_heap * _heap, struct chunk * _chunk){
 	if (slide >= _heap->_free_max){
 		boost::unique_lock<boost::shared_mutex> uniquelock(boost::move(lock));
 
-		unsigned int newslide = _heap->_free_slide.load();
-		if (newslide >= _heap->_free_max){
+		if (_heap->_free_slide.load() >= _heap->_free_max){
 			_resize_freelist(_heap);
 		}
 	} 
@@ -214,15 +227,17 @@ int _bisearch(struct mempage_heap * _heap, size_t size){
 
 	if (_heap->_bigfree_slide > 0){
 		unsigned int slide = 0;
+		std::size_t size_ = 0;
+		std::size_t size__  = 0;
 		while(1){
-			std::size_t size_ = _heap->_bigfree[slide]->size;
+			size_ = _heap->_bigfree[slide]->size;
 			if (size_ == size){
 				ret = slide;
 				size = size_;
 				break;
 			}else if (size_ > size){
 				if (slide > 0){
-					std::size_t size__ = _heap->_bigfree[slide-1]->size;
+					size__ = _heap->_bigfree[slide-1]->size;
 					if (size__ > size){
 						slide = slide/2;
 					}else{
@@ -258,50 +273,40 @@ void _erase(struct mempage_heap * _heap, unsigned int slide){
 }
 
 void _merge(struct mempage_heap * _heap){
-	struct chunk * ret = 0;
-	struct chunk * _tmp = 0;
+	struct chunk * _ret = 0, * _tmp = 0, * _tmpret = 0;
 
 	for(unsigned int i = 0; i < _heap->_free_slide; ){
+		_ret = 0;
 		_tmp = _heap->_free[i];
 		for(unsigned int j = 0; j < _heap->_bigfree_slide; ){
-			_tmp = _merge_chunk(_tmp, _heap->_bigfree[j]);
-			if (_tmp != 0){
-				ret = _tmp;
+			_tmpret = _merge_chunk(_tmp, _heap->_bigfree[j]);
+			if (_tmpret != 0){
+				_tmp = _ret = _tmpret;
 				_erase(_heap, j);
 			}else{
-				if (ret == 0){
-					_tmp = _heap->_free[i];
-				}else{
-					_tmp = ret;
-				}
 				j++;
 			}
 		}
-		if (ret != 0){
-			_recover_to_bigfree(_heap, ret);
+		if (_ret != 0){
+			_recover_to_bigfree(_heap, _ret);
 		}
 
-		if (ret == 0){
+		if (_ret == 0){
 			for(unsigned int j = i+1; j < _heap->_free_slide; ){
-				_tmp = _merge_chunk(_tmp, _heap->_free[j]);
+				_tmpret = _merge_chunk(_tmp, _heap->_free[j]);
 				if (_tmp != 0){
-					ret = _tmp;
+					_ret = _tmp = _tmpret;
 					_heap->_free[j] = _heap->_free[--_heap->_free_slide];
 				}else{
-					if(ret == 0){
-						_tmp = _heap->_free[i];
-					}else{
-						_tmp = ret;
-					}
 					j++;
 				}
 			}
-			if (ret != 0){
-				_recover_to_bigfree(_heap, ret);
+			if (_ret != 0){
+				_recover_to_bigfree(_heap, _ret);
 			}
 		}
 
-		if (ret != 0){
+		if (_ret != 0){
 			_heap->_free[i] = _heap->_free[--_heap->_free_slide];
 		}else{
 			i++;
@@ -314,39 +319,42 @@ void _merge(struct mempage_heap * _heap){
 }	
 
 void _merge_bigfree(struct mempage_heap * _heap){
-	struct chunk * ret = 0;
-	struct chunk * _tmp = 0;
+	struct chunk * _ret = 0, * _tmp = 0, * _tmpret = 0;
 
 	for(unsigned int i = 0; i < _heap->_bigfree_slide; ){
+		_ret = 0;
 		_tmp = _heap->_bigfree[i];
 		for(unsigned int j = i+1; j < _heap->_bigfree_slide; ){
-			_tmp = _merge_chunk(_tmp, _heap->_bigfree[j]);
-			if (_tmp != 0){
-				ret = _tmp;
+			_tmpret = _merge_chunk(_tmp, _heap->_bigfree[j]);
+			if (_tmpret != 0){
+				_ret = _tmp = _tmpret;
 				_erase(_heap, j);
 			}else{
-				if(ret == 0){
-						_tmp = _heap->_bigfree[i];
-					}else{
-						_tmp = ret;
-					}
 				j++;
 			}
 		}
-		if (ret != 0){
-			_recover_to_bigfree(_heap, ret);
+		if (_ret != 0){
+			_erase(_heap, i);
+			_recover_to_bigfree(_heap, _ret);
 		}else{
 			i++;
+		}
+	
+		if(_heap->_bigfree_slide <= _heap->concurrent_count){
+			break;
 		}
 	}
 }
 
 void _resize_bigfreelist(struct mempage_heap * _heap){
-	unsigned int slide = _heap->_bigfree_slide.load();
+	size_t size = 0;
+	unsigned int slide = _heap->_bigfree_slide;
+	struct chunk ** _tmp = 0;
+	
 	if (slide >= _heap->_bigfree_max){
-		size_t size = _heap->_bigfree_max*sizeof(struct chunk *);
+		size = _heap->_bigfree_max*sizeof(struct chunk *);
 		_heap->_bigfree_max *= 2;
-		struct chunk ** _tmp = (struct chunk **)_malloc(_heap->_chunk, size*2);
+		_tmp = (struct chunk **)_malloc(_heap->_chunk, size*2);
 		if (_tmp == 0){
 			size_t tmpsize = (size + chunk_size - 1)/chunk_size*chunk_size;
 			_heap->_chunk = _chunk(_heap, tmpsize);
@@ -358,11 +366,14 @@ void _resize_bigfreelist(struct mempage_heap * _heap){
 }
 
 void _resize_freelist(struct mempage_heap * _heap){
+	size_t size = 0;
 	unsigned int slide = _heap->_free_slide.load();
+	struct chunk ** _tmp = 0;
+
 	if (slide >= _heap->_free_max){
-		size_t size = _heap->_free_max*sizeof(struct chunk *);
+		size = _heap->_free_max*sizeof(struct chunk *);
 		_heap->_free_max *= 2;
-		struct chunk ** _tmp = (struct chunk **)_malloc(_heap->_chunk, size*2);
+		_tmp = (struct chunk **)_malloc(_heap->_chunk, size*2);
 		if (_tmp == 0){
 			size_t tmpsize = (size + chunk_size - 1)/chunk_size*chunk_size;
 			_heap->_chunk = _chunk(_heap, tmpsize);

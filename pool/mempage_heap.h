@@ -25,7 +25,7 @@ struct mempage_heap{
 
 	boost::atomic_flag _bigfree_flag;
 	struct chunk ** _bigfree;
-	boost::atomic_uint _bigfree_slide;
+	unsigned int _bigfree_slide;
 	unsigned int _bigfree_max;
 
 };	
