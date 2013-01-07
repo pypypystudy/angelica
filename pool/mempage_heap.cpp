@@ -26,31 +26,37 @@ void _resize_bigfreelist(struct mempage_heap * _heap);
 
 struct mempage_heap * _create_mempage_heap(){
 	struct chunk * _chunk = _create_chunk(0, chunk_size);
-	struct mempage_heap * _heap = (struct mempage_heap *)_malloc(_chunk, sizeof(struct mempage_heap));
-	_heap->_chunk = _chunk;
-	_chunk->_heap = _heap;
+	struct mempage_heap * _heap = 0;
+
+	if (_chunk != 0){
+		_heap = (struct mempage_heap *)_malloc(_chunk, sizeof(struct mempage_heap));
+		_heap->_chunk = _chunk;
+		_chunk->_heap = _heap;
 	
 #ifdef _WIN32
-	SYSTEM_INFO info;
-	GetSystemInfo(&info);
-	_heap->concurrent_count = info.dwNumberOfProcessors;
+		SYSTEM_INFO info;
+		GetSystemInfo(&info);
+		_heap->concurrent_count = info.dwNumberOfProcessors;
 #endif //_WIN32
-	_heap->_heap = (struct mirco_mempage_heap*)_malloc(_chunk, sizeof(mirco_mempage_heap)*_heap->concurrent_count);
-	for(unsigned int i = 0; i < _heap->concurrent_count; i++){
-		_heap->_heap[i]._father_heap = _heap;
-		_heap->_heap[i].chunk = 0;
-		_heap->_heap[i]._flag.clear();
+		_heap->_heap = (struct mirco_mempage_heap*)_malloc(_chunk, sizeof(mirco_mempage_heap)*_heap->concurrent_count);
+		for(unsigned int i = 0; i < _heap->concurrent_count; i++){
+			_heap->_heap[i]._father_heap = _heap;
+			_heap->_heap[i].chunk = 0;
+			_heap->_heap[i]._flag.clear();
+		}
+
+		_heap->_free = (struct chunk **)_malloc(_chunk, sizeof(struct chunk *)*1024);
+		::new (&_heap->_free_mu) boost::shared_mutex();
+		_heap->_free_slide.store(0);
+		_heap->_free_max = 4096/sizeof(struct chunk *);
+
+		_heap->_bigfree = (struct chunk **)_malloc(_chunk, sizeof(struct chunk *)*1024);
+		::new (&_heap->_bigfree_flag) boost::atomic_flag();
+		_heap->_bigfree_slide = 0;
+		_heap->_bigfree_max = 4096/sizeof(struct chunk *);
+
+		_heap->_tmpchunk = (struct chunk **)_malloc(_heap->_chunk, sizeof(struct chunk *)*1024);
 	}
-
-	_heap->_free = (struct chunk **)_malloc(_chunk, 4096);
-	::new (&_heap->_free_mu) boost::shared_mutex();
-	_heap->_free_slide.store(0);
-	_heap->_free_max = 4096/sizeof(struct chunk *);
-
-	_heap->_bigfree = (struct chunk **)_malloc(_chunk, 4096);
-	::new (&_heap->_bigfree_flag) boost::atomic_flag();
-	_heap->_bigfree_slide = 0;
-	_heap->_bigfree_max = 4096/sizeof(struct chunk *);
 
 	return _heap;
 }
@@ -88,8 +94,10 @@ void * _mempage_heap_realloc(struct mempage_heap * _heap, void * mem, size_t siz
 	void * tmp = _realloc(mem, size);
 	if (tmp == 0){
 		tmp = _mempage_heap_alloc(_heap, size);
-		memcpy(tmp, mem, oldsize);
-		_free(mem);
+		if (tmp != 0){
+			memcpy(tmp, mem, oldsize);
+			_free(mem);
+		}
 	}
 
 	return tmp;
@@ -108,12 +116,15 @@ struct chunk * _chunk(struct mempage_heap * _heap, size_t size){
 	}
 
 	if (_chunk == 0){
-		_chunk = _create_chunk(_heap, size);
+		if ((_chunk = _create_chunk(_heap, size)) != 0){
+			_chunk->_heap = _heap;
+		}
 	}
-	_chunk->_heap = _heap;
-	_chunk->rec_count = 0;
-	_chunk->rec_flag = 0;
-	_chunk->slide = sizeof(struct chunk);
+
+	if (_chunk != 0){
+		_chunk->rec_flag = 0;
+		_chunk->slide = sizeof(struct chunk);
+	}
 
 	return _chunk;
 }
@@ -217,10 +228,10 @@ void _recover_to_bigfree(struct mempage_heap * _heap, struct chunk * _chunk){
 		for(unsigned int i = slide; i < _heap->_bigfree_slide; i++){
 			_heap->_bigfree[i+1]= _heap->_bigfree[i];
 		}
-		_heap->_bigfree_slide++;
 		_heap->_bigfree[slide] = _chunk;
+		_heap->_bigfree_slide++;
 	}
-}
+}	
 
 int _bisearch(struct mempage_heap * _heap, size_t size){
 	int ret = -1;
@@ -319,29 +330,33 @@ void _merge(struct mempage_heap * _heap){
 }	
 
 void _merge_bigfree(struct mempage_heap * _heap){
-	struct chunk * _ret = 0, * _tmp = 0, * _tmpret = 0;
+	if (_heap->_bigfree_slide > _heap->concurrent_count){
+		struct chunk * _ret = 0, * _tmp = 0;
+		unsigned int _tmpslide = 0;
+		unsigned int _old_slide = _heap->_bigfree_slide;
 
-	for(unsigned int i = 0; i < _heap->_bigfree_slide; ){
-		_ret = 0;
-		_tmp = _heap->_bigfree[i];
-		for(unsigned int j = i+1; j < _heap->_bigfree_slide; ){
-			_tmpret = _merge_chunk(_tmp, _heap->_bigfree[j]);
-			if (_tmpret != 0){
-				_ret = _tmp = _tmpret;
-				_erase(_heap, j);
-			}else{
-				j++;
+		_heap->_tmpchunk[_tmpslide++] = _heap->_bigfree[--_heap->_bigfree_slide]; 
+
+		for(unsigned int i = 0; i < _heap->_bigfree_slide; ){
+			_tmp = _heap->_bigfree[i];
+
+			for(unsigned int j = 0; j < _tmpslide; j++){
+				_ret = _merge_chunk(_tmp, _heap->_tmpchunk[j]);
+				if (_ret != 0){
+					_heap->_tmpchunk[j] = _ret;
+					break;
+				}
+			}
+
+			_heap->_bigfree[i] = _heap->_bigfree[--_heap->_bigfree_slide];
+			if (_ret == 0){
+				if (_tmpslide < 1024){
+					_heap->_tmpchunk[_tmpslide++] = _tmp;
+				}
 			}
 		}
-		if (_ret != 0){
-			_erase(_heap, i);
-			_recover_to_bigfree(_heap, _ret);
-		}else{
-			i++;
-		}
-	
-		if(_heap->_bigfree_slide <= _heap->concurrent_count){
-			break;
+		for(unsigned int n = 0; n < _tmpslide; n++){
+			_recover_to_bigfree(_heap, _heap->_tmpchunk[n]);
 		}
 	}
 }

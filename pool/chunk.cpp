@@ -15,13 +15,14 @@ struct chunk * _create_chunk(struct mempage_heap * _heap, size_t size){
 #ifdef _WIN32
 	struct chunk * _chunk = (struct chunk*)VirtualAlloc(0, size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 #endif //_WIN32
-	_chunk->count.store(0);
-	_chunk->_heap = _heap;
-	_chunk->size = size;
-	_chunk->flag = _flag;
-	_chunk->rec_count = 0;
-	_chunk->rec_flag = 0;
-	_chunk->slide = sizeof(struct chunk);
+	if (_chunk != 0){
+		_chunk->count.store(0);
+		_chunk->_heap = _heap;
+		_chunk->size = size;
+		_chunk->flag = _flag;
+		_chunk->rec_flag = 0;
+		_chunk->slide = sizeof(struct chunk);
+	}
 
 	return _chunk;
 }
@@ -35,14 +36,6 @@ void * _brk(struct chunk * _chunk, size_t size){
 	}
 
 	return ret;
-}
-
-bool _isfree(struct chunk * _chunk){
-	return (_chunk->count.load() == 0);
-}
-
-bool _isoldchunk(struct chunk * _chunk){
-	return (_chunk->rec_count > 3);
 }
 
 struct chunk * _merge_chunk(struct chunk * _c1, struct chunk * _c2){

@@ -28,6 +28,8 @@ struct mempage_heap{
 	unsigned int _bigfree_slide;
 	unsigned int _bigfree_max;
 
+	struct chunk ** _tmpchunk;
+
 };	
 	
 struct mempage_heap * _create_mempage_heap();

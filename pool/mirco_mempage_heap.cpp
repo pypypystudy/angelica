@@ -41,14 +41,15 @@ void * _mirco_mempage_heap_alloc(struct mirco_mempage_heap * _heap, size_t size)
 	if (ret == 0){	
 		if (_heap->chunk->count.load() != 0){
 			_heap->chunk->rec_flag.store(1);
-			if (_heap->chunk->count.load() == 0 && _heap->chunk->rec_flag.load() != 2){
-				_recover_chunk(_heap->_father_heap, _heap->chunk);
+			if (_heap->chunk->count.load() == 0){
+				char flag = 1;
+				if (_heap->chunk->rec_flag.compare_exchange_weak(flag, 2)){
+					_heap->chunk ->slide = sizeof(struct chunk);
+				}
 			}
-			_heap->chunk = _chunk(_heap->_father_heap, chunk_size);
 		}else{
 			_heap->chunk->slide = sizeof(struct chunk);
 		}
-
 		ret = _malloc(_heap->chunk, size);
 	}
 

@@ -4,7 +4,7 @@
 
 int main(){
 	std::clock_t begin = clock();
-	for(int i = 10; i < 100000; i++){
+	for(int i = 10; i < 200000; i++){
 		int * ret = 0;
 		if (i == 8191){
 			ret = (int*)angmalloc(i*sizeof(int));
@@ -19,7 +19,7 @@ int main(){
 	std::cout << "angmalloc" << std::clock() - begin << std::endl;
 
 	begin = clock();
-	for(int i = 10; i < 100000; i++){
+	for(int i = 10; i < 200000; i++){
 		int * ret = 0;
 		if (i == 8191){
 			ret = (int*)malloc(i*sizeof(int));
