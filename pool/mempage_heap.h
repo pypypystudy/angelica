@@ -19,8 +19,8 @@ struct mempage_heap{
 	struct chunk * _chunk;
 
 	boost::shared_mutex _free_mu;
-	struct chunk ** _free;
-	boost::atomic_uint _free_slide;
+	boost::atomic<struct chunk *> * _free;
+	boost::atomic_uint _free_slide, _alloc_slide;
 	unsigned int _free_max;
 
 	boost::atomic_flag _bigfree_flag;

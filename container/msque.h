@@ -1,12 +1,12 @@
 /*
- * concurrent_queue.hpp
+ * msque.hpp
  *		 Created on: 2012-8-30
  *			 Author: qianqians
- * concurrent_queue:
+ * msque:
  */
 
-#ifndef _CONCURRENT_QUEUE_H
-#define _CONCURRENT_QUEUE_H
+#ifndef _MSQUE_H
+#define _MSQUE_H
 
 #include <boost/bind.hpp>
 #include <boost/atomic.hpp>
@@ -18,7 +18,7 @@ namespace angelica {
 namespace container{
 
 template <typename T, typename _Allocator = boost::pool_allocator<T> >
-class concurrent_queue{
+class msque{
 private:
 	struct _list_node{
 		_list_node () {_next = 0;}
@@ -41,11 +41,11 @@ private:
 	typedef typename _Allocator::template rebind<_list>::other _list_alloc;
 		
 public:
-	concurrent_queue(void){
+	msque(void){
 		__list.store(get_list());
 	}
 
-	~concurrent_queue(void){
+	~msque(void){
 		put_list(__list.load());
 	}
 
@@ -143,7 +143,7 @@ public:
 			}
 		}
 		data = _hp_next->_hazard->data;
-		_hazard_sys.retire(_hp_begin->_hazard, boost::bind(&angelica::container::concurrent_queue<T>::put_node, this, _1));
+		_hazard_sys.retire(_hp_begin->_hazard, boost::bind(&angelica::container::msque<T>::put_node, this, _1));
 
 		__list.load()->_size--;
 
@@ -173,7 +173,7 @@ private:
 			_list_node * _tmp = _node;
 			_node = _node->_next;
 
-			_hazard_sys.retire(_tmp, boost::bind(&angelica::container::concurrent_queue<T>::put_node, this, _1));
+			_hazard_sys.retire(_tmp, boost::bind(&angelica::container::msque<T>::put_node, this, _1));
 		}while(_node != 0);
 		__list_alloc.deallocate(_p, 1);
 	}
@@ -202,4 +202,4 @@ private:
 
 } /* angelica */
 } /* container */
-#endif //_CONCURRENT_QUEUE_H
+#endif //_MSQUE_H

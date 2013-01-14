@@ -5,7 +5,7 @@
 	
 #include "msgh.h"
 	
-#pragma comment(lib, "angelica.lib")
+#pragma comment(lib, "async_net.lib")
 #pragma comment(lib, "Iphlpapi.lib")
 	
 typedef angelica::async_net::sock_addr sock_addr;
@@ -95,7 +95,7 @@ int main(){
 	fin.getline(addr, 33);
 	std::cout << addr << std::endl;
 
-	for(int i = 0; i < 3500; i++){
+	for(int i = 0; i < 1000; i++){
 		s[i] = new session(service);
 		s[i]->start();
 	}
@@ -112,7 +112,7 @@ int main(){
 
 	service.stop();
 
-	for(int i = 0; i < 3500; i++){
+	for(int i = 0; i < 1000; i++){
 		delete s[i];
 	}
 

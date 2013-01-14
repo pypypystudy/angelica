@@ -53,25 +53,25 @@ struct chunk * _merge_chunk(struct chunk * _c1, struct chunk * _c2){
 }
 
 void * _malloc(struct chunk * _chunk, size_t size){
+	if (_chunk->count.load() == 0){
+		_chunk->slide = sizeof(struct chunk);
+	}
+	
 	void * ret = 0;
+	_chunk->count++;
 
-	while(1){
-		size_t newsize = sizeof(struct chunk*) + sizeof(size_t) + size;
-		struct chunk ** tmp = (struct chunk **)_brk(_chunk, newsize);
-		if (tmp != 0){
-			*tmp = _chunk;
-			size_t * _size = (size_t*)++tmp;
-			*_size = size;
-			ret = (void*)++_size;
-			_chunk->count++;
-			break;
-		}else{
-			if(_chunk->count.load() == 0){
-				_chunk->slide = sizeof(struct chunk);
-			}else{
-				break;
-			}
-		}
+	size_t newsize = sizeof(struct chunk*) + sizeof(size_t) + size;
+	if ((_chunk->slide + newsize) <= _chunk->size){
+		struct chunk ** tmp = (struct chunk **)((char*)_chunk + _chunk->slide);
+		_chunk->slide += newsize;
+		*tmp = _chunk;
+		size_t * _size = (size_t*)++tmp;
+		*_size = size;
+		ret = (void*)++_size;
+	}
+
+	if (ret == 0){
+		_chunk->count--;
 	}
 
 	return ret;
@@ -86,14 +86,21 @@ void * _realloc(void * mem, size_t size){
 	}
 
 	size_t oldsize = *(size_t *)((char*)mem - sizeof(size_t));
+	size_t slide = (char*)mem + oldsize - (char*)_chunk;
+
 	if (oldsize >= size){
+		if (slide == _chunk->slide){
+			_chunk->slide -= (oldsize - size);
+		}
 		return mem;
 	}
 
-	size_t increment = size - oldsize;
-	if (increment < (_chunk->size - _chunk->slide)){
-		_brk(_chunk, increment);
-		ret = mem;
+	if (slide == _chunk->slide){
+		size_t increment = size - oldsize;
+		if (increment < (_chunk->size - _chunk->slide)){
+			_brk(_chunk, increment);
+			ret = mem;
+		}
 	}
 
 	return ret;

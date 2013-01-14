@@ -16,7 +16,7 @@ extern size_t chunk_size;
 
 struct mirco_mempage_heap {
 	struct mempage_heap * _father_heap;
-	struct chunk * chunk;
+	struct chunk * chunk, * chunk_small;
 	boost::atomic_flag _flag;
 };
 

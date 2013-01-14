@@ -8,7 +8,7 @@
 
 #include "msgh.h"
 
-#pragma comment(lib, "angelica.lib")
+#pragma comment(lib, "async_net.lib")
 
 typedef angelica::async_net::sock_addr sock_addr;
 typedef angelica::async_net::socket Socket;
