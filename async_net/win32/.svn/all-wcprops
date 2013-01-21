@@ -1,0 +1,53 @@
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/svn/!svn/ver/115/trunk/angelica/async_net/win32
+END
+iocp_impl.h
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/!svn/ver/113/trunk/angelica/async_net/win32/iocp_impl.h
+END
+Overlapped.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/!svn/ver/115/trunk/angelica/async_net/win32/Overlapped.cpp
+END
+winhdef.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/!svn/ver/113/trunk/angelica/async_net/win32/winhdef.cpp
+END
+base_socket_win32.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/svn/!svn/ver/115/trunk/angelica/async_net/win32/base_socket_win32.cpp
+END
+Overlapped.h
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/svn/!svn/ver/113/trunk/angelica/async_net/win32/Overlapped.h
+END
+winhdef.h
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/!svn/ver/113/trunk/angelica/async_net/win32/winhdef.h
+END
+base_socket_win32.h
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/svn/!svn/ver/115/trunk/angelica/async_net/win32/base_socket_win32.h
+END
+iocp_impl.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/svn/!svn/ver/115/trunk/angelica/async_net/win32/iocp_impl.cpp
+END

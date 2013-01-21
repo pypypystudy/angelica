@@ -1,0 +1,82 @@
+/*
+ * base_socket_win32.h
+ *         Created on: 2012-10-16
+ *			   Author: qianqians
+ * base socket at win32
+ */
+#ifndef _BASE_SOCKET_WIN32_H
+#define _BASE_SOCKET_WIN32_H
+
+#ifdef _WIN32
+
+#include "winhdef.h"
+#include "../error_code.h"
+
+namespace angelica {
+namespace async_net {
+
+class socket;
+class sock_addr;
+
+namespace detail {
+struct simple_buff;
+class read_buff;
+class write_buff;
+} // detail
+
+namespace win32 {
+
+class iocp_impl;
+
+namespace detail {
+SOCKET Getfd();
+void Releasefd(SOCKET fd);
+} // detail
+
+class base_socket_win32 {
+public:
+	void err_close();
+
+private:
+	base_socket_win32();
+	base_socket_win32(iocp_impl & _impl);
+	~base_socket_win32();
+
+	void bind(sock_addr addr);
+
+	void start_accpet();
+	void do_async_accpet();
+	void OnAccept(async_net::detail::read_buff * _buf, SOCKET fd, DWORD llen, _error_code err);
+
+	void start_recv();
+	void do_async_recv();
+	void OnRecv(DWORD llen, _error_code err);
+
+	void async_send();
+	void do_async_send(async_net::detail::simple_buff * _buf);
+	void OnSend(async_net::detail::simple_buff * buf, DWORD llen, _error_code err);
+
+	void async_connect(sock_addr addr);
+	void OnConnect(DWORD llen, _error_code err);
+
+	void disconnect();
+	void do_disconnect(LPOVERLAPPED povld);
+	void onDeconnect(DWORD llen, _error_code err);
+
+	void closesocket();
+	void onClose(DWORD llen, _error_code err);
+
+private:
+	SOCKET fd;
+	iocp_impl * impl;
+
+	friend class async_net::socket;
+
+};
+
+} //win32
+} //async_net
+} //angelica
+
+#endif //_WIN32
+#endif //_BASE_SOCKET_WIN32_H

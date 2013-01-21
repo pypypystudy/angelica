@@ -7,7 +7,6 @@
 #ifdef _WIN32
 
 #include "Overlapped.h"
-#include <angelica/pool/angmalloc.h>
 
 namespace angelica {
 namespace async_net {
@@ -15,19 +14,19 @@ namespace win32 {
 
 namespace detail {
 
-OverlappedEX * CreateOverlapped(){
-	OverlappedEX * ptr = (OverlappedEX *)angmalloc(sizeof(OverlappedEX));
-	::new (ptr) OverlappedEX();
-	ZeroMemory(&ptr->overlap, sizeof(OVERLAPPED));
-	ptr->isstop = 0;
-	ptr->fn_onHandle = 0;
-	
-	return ptr;
-}
+OverlappedEX * GetOverlapped(){
+	typedef angelica::async_net::detail::simple_pool<OverlappedEX> OverlappedEXPool;
+	static OverlappedEXPool _pool;
 
-void DestroyOverlapped(OverlappedEX * ptr){
-	ptr->~OverlappedEX();
-	angfree(ptr);
+	OverlappedEX * ptr = _pool.get();
+	if (ptr == 0) {
+		ptr = new OverlappedEX;
+		ptr->fn_Destory = boost::bind(&OverlappedEXPool::release, &_pool, ptr);
+	}
+	ZeroMemory(&ptr->overlap, sizeof(OVERLAPPED));
+	ptr->fn_onHandle = 0;
+
+	return ptr;
 }
 
 }// detail

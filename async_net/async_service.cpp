@@ -12,15 +12,9 @@ namespace angelica {
 namespace async_net { 
 
 async_service::async_service() : nConnect(0), nMaxConnect(0) {
-	detail::InitMemPagePool();
-	detail::InitReadBuffPool();
-	detail::InitWriteBuffPool();
 }
 
 async_service::~async_service(){
-	detail::DestryMemPagePool();
-	detail::DestryReadBuffPool();
-	detail::DestryWriteBuffPool();
 }
 
 void async_service::start(unsigned int nCurrentNum){

@@ -1,26 +1,37 @@
 /*
  * active.h
  *
- *  Created on: 2012-3-27
+ *  Created on: 2013-1-21
  *      Author: qianqians
  */
+#ifndef _ACTIVE_H
+#define _ACTIVE_H
 
-#ifndef ACTIVE_H_
-#define ACTIVE_H_
+#include <boost/function.hpp>
 
 namespace angelica {
 namespace active {
 
+class active_server;
+class mirco_active;
+
 class active {
+private:
+	typedef boost::function<void(void) > event_handle;
+
 public:
-	active();
-	virtual ~active();
+	active(active_server & _active_server_);
+	~active();
+
+	void post(event_handle _handle);
 
 private:
-
+	active_server * _active_server;
+	mirco_active * _mirco_active;
 
 };
 
-} /* namespace active */
+} /* namespace mirco_active */
 } /* namespace angelica */
-#endif /* ACTIVE_H_ */
+
+#endif //_ACTIVE_H

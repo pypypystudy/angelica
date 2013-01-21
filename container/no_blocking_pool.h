@@ -14,14 +14,10 @@
 
 #include <list>
 #include <boost/thread/mutex.hpp>
-
-#ifdef _WIN32
-#include "win32/winhdef.h"
-#endif 
+#include <boost/atomic.hpp>
 
 namespace angelica {
-namespace async_net {
-namespace detail {
+namespace container {
 
 template <typename T>
 class no_blocking_pool{
@@ -45,32 +41,35 @@ public:
 		delete[] _pool;
 	}
 
-	T * get(){
+	T * pop(){
 		unsigned int slide = 0;
 		T * ret = 0;
 
-		for(unsigned int i = 0; i < _count; i++){
-			boost::mutex::scoped_lock lock(_pool[slide]._mu, boost::try_to_lock);
-			if (lock.owns_lock()){
-				if (!_pool[slide]._pool.empty()){
-					ret = _pool[slide]._pool.front();
-					_pool[slide]._pool.pop_front();
+		while(_size.load() != 0){
+			for(unsigned int i = 0; i < _count; i++){
+				boost::mutex::scoped_lock lock(_pool[slide]._mu, boost::try_to_lock);
+				if (lock.owns_lock()){
+					if (!_pool[slide]._pool.empty()){
+						ret = _pool[slide]._pool.front();
+						_pool[slide]._pool.pop_front();
 
-					break;
+						break;
+					}
+					continue;
 				}
-				continue;
 			}
 		}
 
 		return ret;
 	}
 
-	void release(T * ptr){
+	void put(T * ptr){
 		unsigned int slide = 0;
 		while(1){
 			boost::mutex::scoped_lock lock(_pool[slide]._mu, boost::try_to_lock);
 			if (lock.owns_lock()){
 				_pool[slide]._pool.push_back(ptr);
+				_size++; 
 				break;
 			}
 
@@ -80,29 +79,19 @@ public:
 		}
 	}
 
-	std::size_t unsafe_size(){
-		std::size_t size = 0;
-		for(unsigned int i = 0; i < _count; i++){
-			while(1){
-				boost::mutex::scoped_lock lock(_pool[i]._mu, boost::try_to_lock);
-				if (lock.owns_lock()){
-					size += _pool[i]._pool.size();
-					break;
-				}
-			}
-		}
-
-		return size;
+	std::size_t size(){
+		return _size.load();
 	}
 
 private:
 	mirco_pool * _pool;
 	unsigned int _count;
 
+	boost::atomic_uint _size;
+
 };
 
-}// detail
-}// async_net
+}// container
 }// angelica
 
 #endif //_NO_BLOCKING_POOL_H

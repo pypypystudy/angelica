@@ -7,7 +7,8 @@
 #include "sock_addr.h"
 #include "sock_buff.h"
 #include "socket.h"
-#include "simple_pool.h"
+
+#include <angelica/pool/angmalloc.h>
 
 namespace angelica {
 namespace async_net {
@@ -18,8 +19,8 @@ socket::socket(async_service & _service_) :
 	isaccept(false),
 	isdisconnect(true),
 	_service(&_service_),
-	_read_buff(detail::GetReadBuff()),
-	_write_buff(detail::GetWriteBuff()),
+	_read_buff(detail::CreateReadBuff()),
+	_write_buff(detail::CreateWriteBuff()),
 #ifdef _WIN32
 	fd(_service_._impl)
 #endif
@@ -51,8 +52,8 @@ socket::socket(const socket & s) :
 	isaccept(s.isaccept),
 	isdisconnect(s.isdisconnect),
 	_service(s._service),
-	_read_buff(detail::GetReadBuff()),
-	_write_buff(detail::GetWriteBuff()),
+	_read_buff(detail::CreateReadBuff()),
+	_write_buff(detail::CreateWriteBuff()),
 	fd(s.fd)
 {
 	fn_onAccpet = s.fn_onAccpet;
@@ -77,10 +78,12 @@ void socket::operator=(const socket & s){
 
 socket::~socket(){
 	if (_read_buff != 0){
-		_read_buff->fn_Release();
+		_read_buff->~read_buff();
+		angfree(_read_buff);
 	}
 	if (_write_buff != 0){
-		_write_buff->fn_Release();
+		_write_buff->~write_buff();
+		angfree(_write_buff);
 	}
 }
 

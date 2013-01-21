@@ -12,7 +12,7 @@
 #endif 
 
 #include <boost/function.hpp>
-#include <angelica/container/concurrent_queue.h>
+#include <angelica/container/swapque.h>
 
 namespace angelica { 
 namespace async_net { 
@@ -44,7 +44,7 @@ private:
 	boost::atomic_ulong nConnect;
 	unsigned long nMaxConnect;
 
-	angelica::container::concurrent_queue<fnHandle > event_que;
+	angelica::container::swapque<fnHandle > event_que;
 
 	friend class socket;
 

@@ -12,8 +12,7 @@
 
 #include "winhdef.h"
 #include "../error_code.h"
-
-#include <boost/function.hpp>
+#include "../simple_pool.h"
 
 namespace angelica {
 namespace async_net {
@@ -21,16 +20,16 @@ namespace win32 {
 
 //扩展Overlapped结构
 struct OverlappedEX {
-	int isstop;
+	boost::function<void() > fn_Destory;
 	boost::function<void(std::size_t, _error_code ) > fn_onHandle;
+
 	OVERLAPPED overlap;
 };
 
 namespace detail {
 
 //Overlapped对象池接口
-OverlappedEX * CreateOverlapped();
-void DestroyOverlapped(OverlappedEX * ptr);
+OverlappedEX * GetOverlapped();
 
 }// detail
 

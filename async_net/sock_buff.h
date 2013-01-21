@@ -17,16 +17,13 @@
 #include <boost/atomic.hpp>
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/pool/pool_alloc.hpp>
-#include <angelica/container/concurrent_queue.h>
 
 namespace angelica {
 namespace async_net {
 namespace detail {
 
-void InitMemPagePool();
-char * GetMemPage();
-void ReleaseMemPage(char * page);
-void DestryMemPagePool();
+char * CreateMemPage();
+void DestroyMemPage(char * page);
 
 class read_buff{
 public:	
@@ -42,13 +39,11 @@ public:
 	char * buff;
 	std::size_t buff_size;
 	std::size_t slide;
-	
-	boost::function<void() > fn_Release;
 
 };
-void InitReadBuffPool();
-read_buff * GetReadBuff();
-void DestryReadBuffPool();
+
+read_buff * CreateReadBuff();
+void DestroyReadBuff(read_buff * ptr);
 
 class write_buff {
 public:
@@ -56,8 +51,6 @@ public:
 	~write_buff();
 	
 	void init();
-
-	boost::function<void() > fn_Release;
 
 private:
 	struct buffex{
@@ -99,9 +92,9 @@ private:
 	boost::atomic_flag _send_flag;
 
 };	
-void InitWriteBuffPool();
-write_buff * GetWriteBuff();
-void DestryWriteBuffPool();
+
+write_buff * CreateWriteBuff();
+void DestroyWriteBuff(write_buff * ptr);
 
 } //detail
 } /* namespace async_net */
