@@ -8,8 +8,7 @@
 #ifndef ACTIVE_SERVER_H_
 #define ACTIVE_SERVER_H_
 
-#include <boost/thread/condition.hpp>
-#include <boost/thread/mutex.hpp>
+#include <boost/thread.hpp>
 #include <boost/atomic.hpp>
 
 #include <angelica/container/no_blocking_pool.h>
@@ -26,8 +25,11 @@ public:
 
 	bool do_one();
 
-	void start(unsigned int  nCurrentNum);
+	void start(unsigned int  nCurrentNum = 0);
 	void stop();
+
+private:
+	void run();
 
 private:
 	void post(mirco_active * _mirco_active);
@@ -39,13 +41,14 @@ private:
 	friend class mirco_active;
 	friend class active;
 
-	boost::condition _cond;
+	boost::condition_variable _cond;
 	boost::mutex _mu;
 	boost::atomic_bool _empty_flag;
 
 	boost::atomic_bool _run_flag;
 
 	unsigned int current_num;
+	boost::thread_group th_group;
 
 	angelica::container::no_blocking_pool<mirco_active> _active_pool, _free_active_pool;
 

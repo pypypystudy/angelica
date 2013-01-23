@@ -51,11 +51,11 @@ iocp_impl::~iocp_impl() {
 }
 
 void iocp_impl::start(unsigned int nCurrentNum) {
-	if (nCurrentNum > 0){
-		current_num = nCurrentNum;
+	if (nCurrentNum == 0){
+		nCurrentNum = current_num;
 	}
 
-	for (unsigned int i = 0; i < current_num; i++) {
+	for (unsigned int i = 0; i < nCurrentNum; i++) {
 		DWORD threadid;
 		HANDLE threadHandle = CreateThread(NULL, 0, &iocp_impl::serverwork, (void *)this, 0, &threadid);
 		if (threadHandle == NULL) {

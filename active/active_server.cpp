@@ -41,23 +41,39 @@ bool active_server::do_one() {
 	return true;
 }
 
-void active_server::start(unsigned int  nCurrentNum){
-	if (_run_flag.exchange(true) == false){
-		while(1){
-			if (!do_one()){
-				if (_run_flag.load() == false){
-					break;
-				}
+void active_server::run(){
+	while(1){
+		if (!do_one()){
+			if (_run_flag.load() == false){
+				break;
+			}
 
-				if (_active_pool.size() == 0){
-					_empty_flag.store(false);
+			if (_active_pool.size() == 0){
+				_empty_flag.store(false);
 				
-					boost::mutex::scoped_lock lock(_mu);
-					_cond.timed_wait(lock, boost::get_system_time() + boost::posix_time::seconds(3));
-				}
+				boost::mutex::scoped_lock lock(_mu);
+				_cond.timed_wait(lock, boost::get_system_time() + boost::posix_time::seconds(3));
 			}
 		}
 	}
+}
+
+void active_server::start(unsigned int  nCurrentNum){
+	if (_run_flag.exchange(true) == false) {
+		if (nCurrentNum == 0) {
+			nCurrentNum = current_num;
+		}
+
+		for (unsigned int i = 0; i < nCurrentNum; i++) {
+			boost::thread th(boost::bind(&active_server::run, this));
+			th_group.add_thread(&th);
+		}
+	}
+}
+
+void active_server::stop() {
+	_run_flag.store(false);
+	th_group.join_all();
 }
 
 void active_server::post(mirco_active * _mirco_active){
