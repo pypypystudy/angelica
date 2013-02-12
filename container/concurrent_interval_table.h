@@ -7,7 +7,6 @@
 #ifndef _CONCURRENT_INTERVAL_TABLE_H
 #define _CONCURRENT_INTERVAL_TABLE_H
 
-#include <utility>
 #include <string>
 #include <map>
 #include <boost/atomic.hpp>
@@ -16,14 +15,10 @@
 namespace angelica{
 namespace container{
 
-namespace detail {
-
 #define mask 1023
 #define rehashmask 8191
 
 #define upgradlock 65536 
-
-}//detail
 
 template <typename K, typename V, typename _Allocator = boost::pool_allocator<V> >
 class concurrent_interval_table {
@@ -40,39 +35,41 @@ private:
 
 	typedef typename _Allocator::template rebind<std::pair<K, node> >::other _map_node_alloc;
 	
-	typedef std::pair<K, node> value_type;
-	typedef std::map<K, node, std::less<K>, _map_node_alloc> _map;
+	typedef std::pair<K, node*> value_type;
+	typedef std::map<K, node*, std::less<K>, _map_node_alloc> _map;
 	
+	typedef typename _Allocator::template rebind<node>::other _node_alloc_;
 	typedef typename _Allocator::template rebind<_map>::other _map_alloc_;
 	typedef typename _Allocator::template rebind<bucket>::other _bucket_alloc_;
 	
 public:
 	concurrent_interval_table(){
-		for(int i = 0; i < detail::mask; i++){
+		for(int i = 0; i < mask; i++){
 			_hash_array[i]._hash_bucket.store(0);
 		}
 	}
 
 	~concurrent_interval_table(){
-		for(unsigned int i = 0; i < detail::mask; i++){
+		for(unsigned int i = 0; i < mask; i++){
 			if (_hash_array[i]._rw_flag.load() == -2){
-				for(unsigned int j = 0; j < detail::rehashmask; j++){
-					put_map(_hash_array[i]._hash_bucket[j].load());
+				bucket * _bucket = (bucket *)_hash_array[i]._hash_bucket.load();
+				for(unsigned int j = 0; j < rehashmask; j++){
+					put_map((_map *)_bucket[j]._hash_bucket.load());
 				}
-				put_bucket(_hash_array[i]._hash_bucket, detail::rehashmask);
+				put_bucket(_bucket, rehashmask);
 			}else{
-				put_map(_hash_array[i]._hash_bucket.load());
+				put_map((_map *)_hash_array[i]._hash_bucket.load());
 			}
 		}
 	}
 	
 	void insert(K key, V value){
-		unsigned int hash_value = hash(key, detail::mask);
-		bucket * _bucket = (bucket *)&_hash_array[hash_key];
+		unsigned int hash_value = hash(key, mask);
+		bucket * _bucket = (bucket *)&_hash_array[hash_value];
 		while(1){
 			if (_bucket->_rw_flag.load() == -2){
-				hash_value = hash(key, detail::rehashmask);
-				_bucket = _bucket->_hash_bucket.load();
+				hash_value = hash(key, rehashmask);
+				_bucket = (bucket *)_bucket->_hash_bucket.load();
 				_bucket = (bucket *)&_bucket[hash_value];
 			}
 
@@ -80,28 +77,32 @@ public:
 				continue;
 			}
 
-			_map * _map_ = (_map *)_bucket._hash_bucket.load();
-			_map::iterator iter = _map->find(key);
+			_map * _map_ = (_map *)_bucket->_hash_bucket.load();
+			if (_map_ == 0){
+				_map_ = get_map();
+				_bucket->_hash_bucket.store(_map_);
+			}
+			_map::iterator iter = _map_->find(key);
 			if (iter != _map_->end()){
-				lock_unique(iter->second._rw_flag);
-				iter->second.value = value;
-				unlock_unique(iter->second._rw_flag);
+				lock_unique(iter->second->_rw_flag);
+				iter->second->value = value;
+				unlock_unique(iter->second->_rw_flag);
 				unlock_upgrad(_bucket->_rw_flag);
 			}else{
 				if (!unlock_upgrad_and_lock(_bucket->_rw_flag)){
 					continue;
 				}
 
-				_map_ = (_map *)_bucket._hash_bucket.load();
+				_map_ = (_map *)_bucket->_hash_bucket.load();
 				_map::iterator iter = _map_->find(key);
 				if (iter != _map_->end()){
-					lock_unique(iter->second._rw_flag);
-					iter->second.value = value;
-					unlock_unique(iter->second._rw_flag);
+					lock_unique(iter->second->_rw_flag);
+					iter->second->value = value;
+					unlock_unique(iter->second->_rw_flag);
 				}else{
-					node _node;
-					_node.value = value;
-					_node._rw_flag.store(0);
+					node * _node = get_node();
+					_node->value = value;
+					_node->_rw_flag.store(0);
 					_map_->insert(std::make_pair(key, _node));
 				}
 
@@ -113,11 +114,11 @@ public:
 	}
 
 	bool search(K key, V &value){
-		unsigned int hash_value = hash(key, detail::mask);
-		bucket * _bucket = (bucket *)&_hash_array[hash_key];
+		unsigned int hash_value = hash(key, mask);
+		bucket * _bucket = (bucket *)&_hash_array[hash_value];
 		if (_bucket->_rw_flag.load() == -2){
-			hash_value = hash(key, detail::rehashmask);
-			_bucket = _bucket->_hash_bucket.load();
+			hash_value = hash(key, rehashmask);
+			_bucket = (bucket *)_bucket->_hash_bucket.load();
 			_bucket = (bucket *)&_bucket[hash_value];
 		}
 
@@ -129,24 +130,22 @@ public:
 			return false;
 		}
 		
-		if (iter->second._rw_flag){
-			if (!shared_lock(iter->second._rw_flag)){
-				return false;
-			}
-			value = iter->second.value;
+		if (!shared_lock(iter->second->_rw_flag)){
+			return false;
 		}
+		value = iter->second->value;
+		unlock_shared(iter->second->_rw_flag);
 
 		unlock_shared(_bucket->_rw_flag);
-		unlock_shared(iter->second._rw_flag);
 
 		return true;
 	}
 
 	bool erase(K key, V value){
-		unsigned int hash_value = hash(key, detail::mask);
+		unsigned int hash_value = hash(key, mask);
 		bucket * _bucket = (bucket *)&_hash_array[hash_key];
 		if (_bucket->_rw_flag.load() == -2){
-			hash_value = hash(key, detail::rehashmask);
+			hash_value = hash(key, rehashmask);
 			_bucket = _bucket->_hash_bucket.load();
 			_bucket = (bucket *)&_bucket[hash_value];
 		}
@@ -176,10 +175,6 @@ public:
 	}
 
 private:
-	void _insert(bucket * _bucket, K key, V value){
-		
-	}
-
 	bool shared_lock(boost::atomic_int & _rw_flag){
 		while(1){
 			int _old_flag = _rw_flag.load();
@@ -188,7 +183,7 @@ private:
 				return false;
 			}
 
-			if (_old_flag < 0 || _old_flag == (detail::upgradlock-1)){
+			if (_old_flag < 0 || _old_flag == (upgradlock-1)){
 				continue;
 			}
 
@@ -226,11 +221,11 @@ private:
 				return false;
 			}
 
-			if (_old_flag < 0 || (_old_flag+detail::upgradlock) < 0){
+			if (_old_flag < 0 || (_old_flag+upgradlock) < 0){
 				continue;
 			}
 
-			if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag+detail::upgradlock)){
+			if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag+upgradlock)){
 				break;
 			}
 		}
@@ -250,13 +245,13 @@ private:
 				break;
 			}
 
-			if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag-detail::upgradlock)){
+			if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag-upgradlock)){
 				break;
 			}
 		}
 	}
 
-	void lock_unique(boost::atomic_int & _rw_flag){
+	bool lock_unique(boost::atomic_int & _rw_flag){
 		while(1){
 			int _old_flag = _rw_flag.load();
 			
@@ -264,7 +259,7 @@ private:
 				return false;
 			}
 
-			if (_old_flag > 0){
+			if (_old_flag != 0){
 				continue;
 			}
 
@@ -290,7 +285,7 @@ private:
 		}
 	}
 
-	void unlock_upgrad_and_lock(boost::atomic_int & _rw_flag){
+	bool unlock_upgrad_and_lock(boost::atomic_int & _rw_flag){
 		while(1){
 			int _old_flag = _rw_flag.load();
 			
@@ -302,14 +297,14 @@ private:
 				continue;
 			}
 
-			if ((_old_flag & 0xffff0000) > 0){
-				if (_rw_flag.compare_exchange_weak(_old_flag, (0-_old_flag)){
+			if (_old_flag > 0 && (_old_flag & 0xffff0000) > 0){
+				if (_rw_flag.compare_exchange_weak(_old_flag, (0-_old_flag))){
 					continue;
 				}
 			}
 
 			if (_old_flag != 0){
-				if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag+detail::upgradlock)){
+				if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag+upgradlock)){
 					break;
 				}
 			}
@@ -386,20 +381,35 @@ private:
 		return key%mod;
 	}
 
-	unsigned int hash(K key, int mod){
+	template <typename KEY>
+	unsigned int hash(KEY key, int mod){
 		return key.hash()%mod;
 	}
 	
+	node * get_node(){
+		node * _node = _node_alloc.allocate(1);
+		::new (_node) node();
+		//_node_alloc.construct(_node);
+
+		return _node;
+	}
+
+	void put_node(node * _node_){
+		_node_alloc.destroy(_node_);
+		_node_alloc.deallocate(_node_, 1);
+	}
+
 	_map * get_map(){
 		_map * _map_ = _map_alloc.allocate(1);
-		_map_alloc.construct(_map_);
+		::new (_map_) _map();
+		//_map_alloc.construct(_map_);
 
 		return _map_;
 	}
 
 	void put_map(_map * _map_){
 		_map_alloc.destroy(_map_);
-		_map_alloc.deallocate(_map_);
+		_map_alloc.deallocate(_map_, 1);
 	}
 
 	bucket * get_bucket(unsigned int count){
@@ -407,25 +417,27 @@ private:
 		bucket * _tmpbucket = _bucket;
 		for (int i = 0; i < count; i++)
 		{
-			_bucket_alloc.construct(_tmpbucket++);
+			::new (_tmpbucket++) bucket();
+			//_bucket_alloc.construct(_tmpbucket++);
 		}
 
 		return _bucket;
 	}
 
 	void put_bucket(bucket * _bucket, unsigned int count){
-		bucket * _tmpbucket = _bucket
-		for (int i = 0; i < count; i++)
+		bucket * _tmpbucket = _bucket;
+		for (unsigned int i = 0; i < count; i++)
 		{
-			_bucket_alloc.destroy(_bucket++);
+			_bucket_alloc.destroy(_tmpbucket++);
 		}
 		_bucket_alloc.deallocate(_bucket, count);
 	}
 
 private:
-	bucket _hash_array[detail::mask];
+	bucket _hash_array[mask];
 	boost::atomic_uint _size;
 
+	_node_alloc_ _node_alloc;
 	_map_alloc_ _map_alloc;
 	_bucket_alloc_ _bucket_alloc;
 
