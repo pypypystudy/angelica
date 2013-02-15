@@ -25,7 +25,7 @@ class concurrent_interval_table {
 private:
 	struct bucket {
 		boost::atomic<void * > _hash_bucket;
-		boost::atomic_int _rw_flag; // -2 _bucket, -1 write, 0-N read, M upgrad
+		boost::atomic_int _rw_flag; // /*-2 _bucket,*/ -1 write, 0-N read, M upgrad
 	};
 
 	struct node {
@@ -51,15 +51,7 @@ public:
 
 	~concurrent_interval_table(){
 		for(unsigned int i = 0; i < mask; i++){
-			if (_hash_array[i]._rw_flag.load() == -2){
-				bucket * _bucket = (bucket *)_hash_array[i]._hash_bucket.load();
-				for(unsigned int j = 0; j < rehashmask; j++){
-					put_map((_map *)_bucket[j]._hash_bucket.load());
-				}
-				put_bucket(_bucket, rehashmask);
-			}else{
-				put_map((_map *)_hash_array[i]._hash_bucket.load());
-			}
+			put_map((_map *)_hash_array[i]._hash_bucket.load());
 		}
 	}
 	
@@ -67,23 +59,16 @@ public:
 		unsigned int hash_value = hash(key, mask);
 		bucket * _bucket = (bucket *)&_hash_array[hash_value];
 		while(1){
-			if (_bucket->_rw_flag.load() == -2){
-				hash_value = hash(key, rehashmask);
-				_bucket = (bucket *)_bucket->_hash_bucket.load();
-				_bucket = (bucket *)&_bucket[hash_value];
-			}
-
 			if (!upgrad_lock(_bucket->_rw_flag)){
 				continue;
 			}
 
 			_map * _map_ = (_map *)_bucket->_hash_bucket.load();
-			if (_map_ == 0){
-				_map_ = get_map();
-				_bucket->_hash_bucket.store(_map_);
+			_map::iterator iter; 
+			if (_map_ != 0){
+				iter = _map_->find(key);
 			}
-			_map::iterator iter = _map_->find(key);
-			if (iter != _map_->end()){
+			if (_map_ != 0 && iter != _map_->end()){
 				lock_unique(iter->second->_rw_flag);
 				iter->second->value = value;
 				unlock_unique(iter->second->_rw_flag);
@@ -91,6 +76,11 @@ public:
 			}else{
 				if (!unlock_upgrad_and_lock(_bucket->_rw_flag)){
 					continue;
+				}
+
+				if (_map_ == 0){
+					_map_ = get_map();
+					_bucket->_hash_bucket.store(_map_);
 				}
 
 				_map_ = (_map *)_bucket->_hash_bucket.load();
@@ -111,17 +101,14 @@ public:
 
 			break;
 		}
+
+		_size++;
 	}
 
 	bool search(K key, V &value){
 		unsigned int hash_value = hash(key, mask);
 		bucket * _bucket = (bucket *)&_hash_array[hash_value];
-		if (_bucket->_rw_flag.load() == -2){
-			hash_value = hash(key, rehashmask);
-			_bucket = (bucket *)_bucket->_hash_bucket.load();
-			_bucket = (bucket *)&_bucket[hash_value];
-		}
-
+		
 		shared_lock(_bucket->_rw_flag);
 		
 		_map * _map_ = (_map *)_bucket->_hash_bucket.load();
@@ -144,12 +131,7 @@ public:
 	bool erase(K key, V value){
 		unsigned int hash_value = hash(key, mask);
 		bucket * _bucket = (bucket *)&_hash_array[hash_key];
-		if (_bucket->_rw_flag.load() == -2){
-			hash_value = hash(key, rehashmask);
-			_bucket = _bucket->_hash_bucket.load();
-			_bucket = (bucket *)&_bucket[hash_value];
-		}
-
+		
 		shared_lock(_bucket->_rw_flag);
 		
 		_map * _map_ = (_map *)_bucket->_hash_bucket.load();
@@ -159,13 +141,15 @@ public:
 		}
 		
 		if (iter->second._rw_flag){
-			if (!lock_unique(iter->second._rw_flag)){
+			if (!lock_unique(iter->second->_rw_flag)){
 				return false;
 			}
-			iter->second._rw_flag.store(-2);
+			iter->second->_rw_flag.store(-2);
 		}
 
 		unlock_shared(_bucket->_rw_flag);
+
+		_size--;
 
 		return true;
 	}
