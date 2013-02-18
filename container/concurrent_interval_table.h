@@ -25,12 +25,12 @@ class concurrent_interval_table {
 private:
 	struct bucket {
 		boost::atomic<void * > _hash_bucket;
-		boost::atomic_int _rw_flag; // /*-2 _bucket,*/ -1 write, 0-N read, M upgrad
+		boost::atomic_int _rw_flag; // -1 write, 0-N read, M upgrad
 	};
 
 	struct node {
 		V value;
-		boost::atomic_int _rw_flag; //  -2 _delete, -1 write, 0-N read, M upgrad
+		boost::atomic_int _rw_flag; //  -2147483647 _delete, -1 write, 0-N read, M upgrad
 	};
 
 	typedef typename _Allocator::template rebind<std::pair<K, node> >::other _map_node_alloc;
@@ -144,7 +144,7 @@ public:
 			if (!lock_unique(iter->second->_rw_flag)){
 				return false;
 			}
-			iter->second->_rw_flag.store(-2);
+			iter->second->_rw_flag.store(-2147483647);
 		}
 
 		unlock_shared(_bucket->_rw_flag);
@@ -163,11 +163,11 @@ private:
 		while(1){
 			int _old_flag = _rw_flag.load();
 			
-			if (_old_flag == -2){
+			if (_old_flag == -2147483647){
 				return false;
 			}
 
-			if (_old_flag < 0 || _old_flag == (upgradlock-1)){
+			if (_old_flag < 0 || (_old_flag & 0x0000ffff) == (upgradlock-1)){
 				continue;
 			}
 
@@ -201,7 +201,7 @@ private:
 		while(1){
 			int _old_flag = _rw_flag.load();
 
-			if (_old_flag == -2){
+			if (_old_flag == -2147483647){
 				return false;
 			}
 
@@ -239,7 +239,7 @@ private:
 		while(1){
 			int _old_flag = _rw_flag.load();
 			
-			if (_old_flag == -2){
+			if (_old_flag == -2147483647){
 				return false;
 			}
 
@@ -256,24 +256,14 @@ private:
 	}
 
 	void unlock_unique(boost::atomic_int & _rw_flag){
-		while(1){
-			int _old_flag = _rw_flag.load();
-			
-			if (_old_flag != -1){
-				break;
-			}
-
-			if (_rw_flag.compare_exchange_weak(_old_flag, 0)){
-				break;
-			}
-		}
+		_rw_flag++;
 	}
 
 	bool unlock_upgrad_and_lock(boost::atomic_int & _rw_flag){
 		while(1){
 			int _old_flag = _rw_flag.load();
 			
-			if (_old_flag == -2){
+			if (_old_flag == -2147483647){
 				return false;
 			}
 
@@ -288,13 +278,24 @@ private:
 			}
 
 			if (_old_flag != 0){
-				if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag+upgradlock)){
+				if (_rw_flag.compare_exchange_weak(_old_flag, _old_flag+(upgradlock-2))){
 					break;
 				}
 			}
 		}
 
-		return lock_unique(_rw_flag);
+		while(_rw_flag.load() < -65536);
+
+		int _flag = _rw_flag.load();
+		while(1){
+			if (_rw_flag.compare_exchange_strong(_flag, _flag+1)){
+				break;
+			}
+			
+			while(_rw_flag.load() == _flag);
+		}
+
+		return true;
 	}
 
 	unsigned int hash(char * skey, unsigned int mod){
