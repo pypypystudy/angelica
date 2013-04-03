@@ -10,13 +10,13 @@
 #include <string>
 
 #include <angelica/detail/tools.h>
-#include <angelica/pool/angmalloc.h>
-#include <angelica/container/no_blocking_pool.h>
 
 #include "iocp_impl.h"
 #include "base_socket_win32.h"
 #include "Overlapped.h"
 
+#include "../buff_pool.h"
+#include "../socket_pool.h"
 #include "../socket.h"
 #include "../sock_addr.h"
 #include "../sock_buff.h"
@@ -25,91 +25,21 @@ namespace angelica {
 namespace async_net {
 namespace win32 {
 
-namespace detail {
-
-typedef angelica::container::no_blocking_pool<unsigned int> sock_pool;
-static sock_pool _sock_pool;
-
-void InitWin32SOCKETPool(){
-	SOCKET fd = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0, 0, WSA_FLAG_OVERLAPPED);
-	_sock_pool.put((unsigned int *)fd);
-}
-
-SOCKET Getfd(){
-	SOCKET fd = (SOCKET)_sock_pool.pop();
-	if (fd == 0){
-		fd = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0, 0, WSA_FLAG_OVERLAPPED);
-	}
-	
-	int nZeroSend = 0;
-	if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (char *)nZeroSend, sizeof(nZeroSend)) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
-
-	int nZeroRecv = 0;
-	if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)nZeroRecv, sizeof(nZeroRecv)) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
-
-	BOOL bNodelay = true;
-	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)bNodelay, sizeof(BOOL)) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
-
-	unsigned long ul = 1;
-	if (ioctlsocket(fd, FIONBIO, &ul) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
-
-	BOOL bSet = TRUE;
-	if(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char *)&bSet, sizeof(bSet)) == 0){
-		tcp_keepalive alive_in;
-		tcp_keepalive alive_out;
-		unsigned long ulBytesRet;
-
-		alive_in.keepaliveinterval = 1000;
-		alive_in.keepalivetime = 500;
-		alive_in.onoff = true;
-
-		WSAIoctl(fd, SIO_KEEPALIVE_VALS, &alive_in, sizeof(alive_in), &alive_out, sizeof(alive_out), &ulBytesRet, 0, 0);
-	}
-
-	return fd;
-}
-
-void Releasefd(SOCKET fd){
-	if (_sock_pool.size() > 1024){
-		closesocket(fd);
-	}else{
-		_sock_pool.put((unsigned int *)fd);
-	}
-}
-
-void DestroyWin32SOCKETPool(){
-	while(_sock_pool.size() != 0){
-		SOCKET fd = (SOCKET)_sock_pool.pop();
-		if (fd == 0){
-			break;
-		}
-		closesocket(fd);
-	}
-}
-	
-} //detail
+angelica::container::no_blocking_pool<unsigned int> base_socket_win32::_sock_pool;
 
 base_socket_win32::base_socket_win32(iocp_impl & _impl) : impl(&_impl), tryconnectcount(0) {
-	fd = detail::Getfd();
+	fd = Getfd();
 
-	if (CreateIoCompletionPort((HANDLE)fd, _impl.hIOCP, 0, 0) != _impl.hIOCP){
+	if (CreateIoCompletionPort((HANDLE)fd, _impl.hIOCP, (ULONG_PTR)this, 0) != _impl.hIOCP){
 		DWORD err = WSAGetLastError();
 	}
 
-	s = container_of(this, socket, fd);
+	s = container_of(this, socket_base, fd);
 	_service = container_of(impl, async_service, _impl);
 }
 
 base_socket_win32::base_socket_win32() : fd(0), impl(0){
-	s = container_of(this, socket, fd);
+	s = container_of(this, socket_base, fd);
 	_service = container_of(impl, async_service, _impl);
 }
 
@@ -120,7 +50,7 @@ base_socket_win32::base_socket_win32(const base_socket_win32 & s_){
 	_remote_addr = s_._remote_addr;
 	tryconnectcount = s_.tryconnectcount;
 
-	s = container_of(this, socket, fd);
+	s = container_of(this, socket_base, fd);
 	_service = container_of(impl, async_service, _impl);
 }
 
@@ -144,19 +74,19 @@ int base_socket_win32::bind(sock_addr addr){
 
 int base_socket_win32::do_async_accpet(){
 	DWORD dwBytes;
-	SOCKET _clientfd = detail::Getfd();
-	async_net::detail::read_buff * _read_buff = async_net::detail::CreateReadBuff();
-	OverlappedEX * olp = detail::CreateOverlapped();
-	olp->fn_onHandle = boost::bind(&base_socket_win32::OnAccept, this, _read_buff, _clientfd, _1, _2);
+	socket_base * _client_socket = async_net::detail::SocketPool::get(*s->_service);
+	OverlappedEX_Accept * olp = detail::OverlappedEXPool<OverlappedEX_Accept >::get();
+	olp->socket_ = _client_socket;
+	olp->overlapex.type = win32_tcp_accept_complete;
 			
 	if (!AcceptEx(fd, 
-				  _clientfd, 
-			 	  _read_buff->buff, 
+				  _client_socket->fd.fd, 
+				  _client_socket->_read_buff->buff, 
 				  0, 
 				  sizeof(sockaddr_in) + 16, 
 				  sizeof(sockaddr_in) + 16, 
 				  &dwBytes, 
-				  &olp->overlap)){
+				  &olp->overlapex.overlap)){
 		
 		DWORD err = WSAGetLastError();
 		if (err != ERROR_IO_PENDING){
@@ -184,28 +114,27 @@ int base_socket_win32::start_accpet(){
 	return socket_succeed;
 }
 
-void base_socket_win32::OnAccept(async_net::detail::read_buff * _buf, SOCKET _fd, DWORD llen, _error_code err) {
-	socket sClient;
+void base_socket_win32::OnAccept(socket_base * sClient, DWORD llen, _error_code err) {
 	sock_addr addr;
-	
+
 	if ((_service->nConnect++ < _service->nMaxConnect) && s->isaccept){
 		s->fd.do_async_accpet();
 	}
-
+	
 	if(s->isclosed){
 		err = is_closed;
-		detail::Releasefd(_fd);
+		Releasefd(sClient->fd.fd);
 	}
 
 	if (err){
-		detail::Releasefd(_fd);
+		Releasefd(sClient->fd.fd);
 	}else{
 		LPSOCKADDR local_addr = 0;
 		int local_addr_length = 0;
 		LPSOCKADDR remote_addr = 0;
 		int remote_addr_length = 0;
 		GetAcceptExSockaddrs(
-			_buf->buff, 
+			sClient->_read_buff->buff, 
 			llen, 
 			sizeof(sockaddr_in) + 16, 
 			sizeof(sockaddr_in) + 16, 
@@ -215,34 +144,35 @@ void base_socket_win32::OnAccept(async_net::detail::read_buff * _buf, SOCKET _fd
 			&remote_addr_length);
 	
 		if (remote_addr_length > sizeof(sockaddr_in) + 16) {
-			detail::Releasefd(_fd);
+			Releasefd(sClient->fd.fd);
 		}else{
-			_buf->~read_buff();
-			angfree(_buf);
-
 			if (llen > 0){
-				_buf->slide += llen;
+				sClient->_read_buff->slide += llen;
 			}
 
-			setsockopt(_fd, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char *)(fd), sizeof(fd));
-			if (CreateIoCompletionPort((HANDLE)_fd, impl->hIOCP, 0, 0) != impl->hIOCP){
+			setsockopt(sClient->fd.fd, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char *)&fd, sizeof(fd));
+			if (CreateIoCompletionPort((HANDLE)sClient->fd.fd, impl->hIOCP, 0, 0) != impl->hIOCP){
 				DWORD err = WSAGetLastError();
 			}
 
 			addr = remote_addr;
 
-			sClient.fd.fd = _fd;
-			sClient.fd.impl = impl;
-			sClient._service = s->_service;
-			sClient.isdisconnect = false;
+			sClient->isdisconnect = false;
 		}
 	}
-	s->fn_onAccpet(sClient, addr, err);
+
+	socket socket_;
+	socket_._socket = sClient;
+	if (!s->fn_onAccpet.empty()){
+		s->fn_onAccpet(socket_, addr, err);
+	}
 }
 
 int base_socket_win32::start_recv() {
 	if (s->_read_buff->slide > 0){
-		s->fn_onRecv(s->_read_buff->buff, s->_read_buff->slide, socket_succeed);
+		if (!s->fn_onRecv.empty()){
+			s->fn_onRecv(s->_read_buff->buff, s->_read_buff->slide, socket_succeed);
+		}
 		s->_read_buff->slide = 0;
 	}
 
@@ -253,8 +183,8 @@ int base_socket_win32::do_async_recv(){
 	DWORD flag = 0;
 	DWORD llen = 0;
 	
-	OverlappedEX * ovl = detail::CreateOverlapped();
-	ovl->fn_onHandle = boost::bind(&base_socket_win32::OnRecv, this, _1, _2);
+	OverlappedEX * ovl = detail::OverlappedEXPool<OverlappedEX >::get();
+	ovl->type = win32_tcp_recv_complete;
 	
 	s->_read_buff->_wsabuf.buf = 0;
 	s->_read_buff->_wsabuf.len = 0;
@@ -288,15 +218,22 @@ void base_socket_win32::OnRecv(DWORD llen, _error_code err) {
 			}
 			
 			if (llen == size){
-				s->_read_buff->buff_size *= 2;
-				while((s->_read_buff->buff = (char*)angrealloc(s->_read_buff->buff, s->_read_buff->buff_size)) == 0);
+				unsigned int newllen = s->_read_buff->buff_size*2;
+				char * tmp = async_net::detail::BuffPool::get(newllen);
+
+				memcpy(tmp, s->_read_buff->buff, s->_read_buff->buff_size);
+				async_net::detail::BuffPool::release(s->_read_buff->buff, s->_read_buff->buff_size);
+				s->_read_buff->buff = tmp;
+				s->_read_buff->buff_size = newllen;
 			}
 
 			s->_read_buff->slide += llen;
 		}
 
 		if (s->isrecv){
-			s->fn_onRecv(s->_read_buff->buff, s->_read_buff->slide, 0);
+			if (!s->fn_onRecv.empty()){
+				s->fn_onRecv(s->_read_buff->buff, s->_read_buff->slide, 0);
+			}
 			s->_read_buff->slide = 0;
 			
 			if (!err){
@@ -306,7 +243,9 @@ void base_socket_win32::OnRecv(DWORD llen, _error_code err) {
 	}
 	
 	if (err){
-		s->fn_onRecv(0, 0, err);
+		if (!s->fn_onRecv.empty()){
+			s->fn_onRecv(0, 0, err);
+		}
 	}
 }	
 
@@ -319,8 +258,8 @@ int base_socket_win32::do_async_send(){
 		DWORD flag = 0;
 		DWORD llen = 0;
 
-		OverlappedEX * ovl = detail::CreateOverlapped();
-		ovl->fn_onHandle = boost::bind(&base_socket_win32::OnSend, this, _1, _2);
+		OverlappedEX * ovl = detail::OverlappedEXPool<OverlappedEX >::get();
+		ovl->type = win32_tcp_send_complete;
 		
 		if (WSASend(fd, 
 					s->_write_buff->send_buff_.load()->_wsabuf, 
@@ -339,13 +278,22 @@ int base_socket_win32::do_async_send(){
 	return socket_succeed;
 }
 
-void base_socket_win32::OnSend(DWORD llen, _error_code err){
+void base_socket_win32::OnSend(_error_code err){
 	if (!err){
 		s->_write_buff->clear();
+
+		if (!s->fn_onSend.empty()){
+			s->fn_onSend(0);
+		}
+
 		err = do_async_send();
 	}
 
-	s->fn_onSend(err);
+	if (err){
+		if (!s->fn_onSend.empty()){
+			s->fn_onSend(err);
+		}
+	}
 }	
 
 int base_socket_win32::async_connect(sock_addr addr){
@@ -364,8 +312,8 @@ int base_socket_win32::do_async_connect() {
 	
 	DWORD llen = 0;
 	
-	OverlappedEX * ovl = detail::CreateOverlapped();
-	ovl->fn_onHandle = boost::bind(&base_socket_win32::OnConnect, this, _1, _2);
+	OverlappedEX * ovl = detail::OverlappedEXPool<OverlappedEX >::get();
+	ovl->type = win32_tcp_connect_complete;
 	
 	DWORD dwBytes;
 	GUID GuidConnectEx = WSAID_CONNECTEX;
@@ -391,7 +339,7 @@ int base_socket_win32::do_async_connect() {
 	return socket_succeed;
 }
 
-void base_socket_win32::OnConnect(DWORD llen, _error_code err) {
+void base_socket_win32::OnConnect(_error_code err) {
 	tryconnectcount++;
 	if (err){
 		if (tryconnectcount < 3){
@@ -402,19 +350,21 @@ void base_socket_win32::OnConnect(DWORD llen, _error_code err) {
 		s->isdisconnect = false;
 	}
 
-	s->fn_onConnect(err);
+	if (!s->fn_onConnect.empty()){
+		s->fn_onConnect(err);
+	}
 }
 
 int base_socket_win32::disconnect(){
 	CancelIo((HANDLE)fd);
 
-	OverlappedEX * ovl = detail::CreateOverlapped();
-	ovl->fn_onHandle = boost::bind(&base_socket_win32::onDeconnect, this, _1, _2);
+	OverlappedEX * ovl = detail::OverlappedEXPool<OverlappedEX >::get();
+	ovl->type = win32_tcp_disconnect_complete;
 	
 	return do_disconnect(&ovl->overlap);
 }
 
-void base_socket_win32::onDeconnect(DWORD llen, _error_code err){
+void base_socket_win32::onDeconnect(_error_code err){
 	if (!err){
 		s->isrecv = false;
 		s->isaccept = false;
@@ -451,21 +401,73 @@ int base_socket_win32::do_disconnect(LPOVERLAPPED povld){
 
 int base_socket_win32::closesocket(){
 	if (s->isdisconnect){
-		onClose(fd, 0, 0);
+		onClose(fd);
 	}else{
 		CancelIo((HANDLE)fd);
 
-		OverlappedEX * ovl = detail::CreateOverlapped();
-		ovl->fn_onHandle = boost::bind(&base_socket_win32::onClose, fd, _1, _2);
+		OverlappedEX_close * ovl = detail::OverlappedEXPool<OverlappedEX_close>::get();
+		ovl->fd = fd;
+		ovl->overlapex.type = win32_tcp_close_complete;
 	
-		return do_disconnect(&ovl->overlap);
+		return do_disconnect(&ovl->overlapex.overlap);
 	}
 
 	return socket_succeed;
 }
 
-void base_socket_win32::onClose(SOCKET fd, DWORD llen, _error_code err){
-	detail::Releasefd(fd);
+void base_socket_win32::onClose(SOCKET fd){
+	Releasefd(fd);
+}
+
+
+SOCKET base_socket_win32::Getfd(){
+	SOCKET fd = (SOCKET)_sock_pool.pop();
+	if (fd == 0){
+		fd = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0, 0, WSA_FLAG_OVERLAPPED);
+	}
+	
+	int nZeroSend = 0;
+	if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (char *)&nZeroSend, sizeof(nZeroSend)) == SOCKET_ERROR){
+		DWORD err = WSAGetLastError();
+	}
+
+	int nZeroRecv = 0;
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)&nZeroRecv, sizeof(nZeroRecv)) == SOCKET_ERROR){
+		DWORD err = WSAGetLastError();
+	}
+
+	BOOL bNodelay = true;
+	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&bNodelay, sizeof(BOOL)) == SOCKET_ERROR){
+		DWORD err = WSAGetLastError();
+	}
+
+	unsigned long ul = 1;
+	if (ioctlsocket(fd, FIONBIO, &ul) == SOCKET_ERROR){
+		DWORD err = WSAGetLastError();
+	}
+
+	BOOL bSet = TRUE;
+	if(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char *)&bSet, sizeof(bSet)) == 0){
+		tcp_keepalive alive_in;
+		tcp_keepalive alive_out;
+		unsigned long ulBytesRet;
+
+		alive_in.keepaliveinterval = 1000;
+		alive_in.keepalivetime = 500;
+		alive_in.onoff = true;
+
+		WSAIoctl(fd, SIO_KEEPALIVE_VALS, &alive_in, sizeof(alive_in), &alive_out, sizeof(alive_out), &ulBytesRet, 0, 0);
+	}
+
+	return fd;
+}
+
+void base_socket_win32::Releasefd(SOCKET fd){
+	if (_sock_pool.size() > 1024){
+		::closesocket(fd);
+	}else{
+		_sock_pool.put((unsigned int *)fd);
+	}
 }
 
 } //win32

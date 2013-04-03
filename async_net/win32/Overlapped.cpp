@@ -1,13 +1,11 @@
 /*
  * Overlapped.cpp
- *    Created on: 2012-10-16
- *        Author: qianqians
- * Overlapped对象池接口实现
+ *  Created on: 2012-10-16
+ *		Author: qianqians
+ * 扩展Overlapped结构
+ * 定义Overlapped对象池
  */
-#ifdef _WIN32
-
 #include "Overlapped.h"
-#include <angelica/pool/angmalloc.h>
 
 namespace angelica {
 namespace async_net {
@@ -15,25 +13,8 @@ namespace win32 {
 
 namespace detail {
 
-OverlappedEX * CreateOverlapped(){
-	OverlappedEX * ptr = (OverlappedEX *)angmalloc(sizeof(OverlappedEX));
-	::new (ptr) OverlappedEX();
-	ZeroMemory(&ptr->overlap, sizeof(OVERLAPPED));
-	ptr->isstop = 0;
-	ptr->fn_onHandle = 0;
-	
-	return ptr;
-}
-
-void DestroyOverlapped(OverlappedEX * ptr){
-	ptr->~OverlappedEX();
-	angfree(ptr);
-}
-
-}// detail
+} //detail
 
 } //win32
 } //async_net
 } //angelica
-
-#endif //_WIN32

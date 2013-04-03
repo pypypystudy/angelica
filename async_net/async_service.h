@@ -13,11 +13,13 @@
 
 #include <boost/function.hpp>
 #include <angelica/container/swapque.h>
+#include <angelica/container/no_blocking_pool.h>
 
 namespace angelica { 
 namespace async_net { 
 
-class socket;
+class socket_base;
+
 typedef boost::function<void()> fnHandle;
 
 class async_service{
@@ -30,7 +32,6 @@ public:
 
 	void post(fnHandle fn);
 
-private:
 	bool do_one();
 
 private:
@@ -45,8 +46,9 @@ private:
 	unsigned long nMaxConnect;
 
 	angelica::container::swapque<fnHandle > event_que;
-
-	friend class socket;
+		
+	friend class socket_base;
+	friend class base_socket_win32;
 
 }; 
 

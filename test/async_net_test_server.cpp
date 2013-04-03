@@ -30,9 +30,7 @@ class Session
 {
 public:
 	Session(const Socket & _s) : s(_s), _buff(new char[sizeof(msg)]), buff_llen(0) {
-		s.register_recv(boost::bind(&Session::onRecv, this, _1, _2, _3));
-		s.register_send(boost::bind(&Session::onSend, this, _1));
-		s.start_recv();
+		s.async_recv(boost::bind(&Session::onRecv, this, _1, _2, _3), true);
 	}
 	~Session(){};
 
@@ -42,6 +40,7 @@ private:
 	char * _buff;
 	unsigned int buff_llen;
 	
+public:
 	void onSend(int err){
 		if (!err){
 			Sendcount++; 
@@ -58,6 +57,11 @@ private:
 			msg * msg_ = (msg*)buff;
 			msg_->csid++;
 			msg_->count++;
+
+			int n_ = msg_->csid * msg_->count;
+			n_ += n_;
+			n_ += n_;
+			n_ += n_;
 
 			if (msg_->csid >= mapSocket.size()){
 				msg_->csid = 0;
@@ -86,7 +90,7 @@ private:
 				_mu.unlock();
 				
 				if (s != 0){
-					s->s.async_send((char*)msg_, sizeof(msg));
+					s->s.async_send((char*)msg_, sizeof(msg), boost::bind(&Session::onSend, s, _1));
 				}
 			}
 
@@ -178,7 +182,7 @@ void dotest(){
 		_mu.unlock();
 				
 		if (s != 0){
-			s->s.async_send((char*)&msg, sizeof(msg));
+			s->s.async_send((char*)&msg, sizeof(msg), boost::bind(&Session::onSend, s, _1));
 		}
 	}
 }
@@ -188,7 +192,7 @@ int main(){
 	service.start();
 
 	angelica::async_net::socket s(service);
-	s.register_accpet(&onAccpet);
+	//s.register_accpet(&onAccpet);
 
 	char addr[32];
 	memset(addr, 0, 32);
@@ -197,7 +201,7 @@ int main(){
 	std::cout << addr << std::endl;
 
 	s.bind(sock_addr(addr, 3311));
-	s.start_accpet(100000);
+	s.async_accpet(100000, boost::bind(&onAccpet, _1, _2, _3), true);
 	
 	std::cout << "angelica async_net 性能测试 server" << std::endl;
 	std::cout << "输入r 重新测试" << std::endl;
@@ -210,7 +214,7 @@ int main(){
 
 		switch(in){
 		case 'r':
-			s.end_accpet();
+			s.async_accpet(100000, boost::bind(&onAccpet, _1, _2, _3), false);
 			dotest();
 			break;
 		case 'q':
@@ -229,7 +233,7 @@ int main(){
 	}
 
 end:
-	s.end_accpet();
+	s.async_accpet(100000, boost::bind(&onAccpet, _1, _2, _3), false);
 	s.closesocket();
 
 	service.stop();

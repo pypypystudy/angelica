@@ -13,10 +13,14 @@
 #include "../sock_addr.h"
 #include "../error_code.h"
 
+#include <boost/function.hpp>
+
+#include <angelica/container/no_blocking_pool.h>
+
 namespace angelica {
 namespace async_net {
 
-class socket;
+class socket_base;
 class sock_addr;
 class async_service;
 
@@ -30,14 +34,6 @@ namespace win32 {
 
 class iocp_impl;
 
-namespace detail {
-
-void InitWin32SOCKETPool();
-SOCKET Getfd();
-void Releasefd(SOCKET fd);
-void DestroyWin32SOCKETPool();
-} // detail
-
 class base_socket_win32 {
 private:
 	base_socket_win32();
@@ -49,7 +45,7 @@ private:
 
 	int start_accpet();
 	int do_async_accpet();
-	void OnAccept(async_net::detail::read_buff * _buf, SOCKET fd, DWORD llen, _error_code err);
+	void OnAccept(socket_base * sClient, DWORD llen, _error_code err);
 
 	int start_recv();
 	int do_async_recv();
@@ -57,29 +53,36 @@ private:
 
 	int async_send();
 	int do_async_send();
-	void OnSend(DWORD llen, _error_code err);
+	void OnSend(_error_code err);
 
 	int async_connect(sock_addr addr);
 	int do_async_connect();
-	void OnConnect(DWORD llen, _error_code err);
+	void OnConnect(_error_code err);
 
 	int disconnect();
 	int do_disconnect(LPOVERLAPPED povld);
-	void onDeconnect(DWORD llen, _error_code err);
+	void onDeconnect(_error_code err);
 
 	int closesocket();
-	static void onClose(SOCKET fd, DWORD llen, _error_code err);
+	static void onClose(SOCKET fd);
+
+private:
+	static SOCKET Getfd();
+	static void Releasefd(SOCKET fd);
 
 private:
 	SOCKET fd;
-	socket * s;
+	socket_base * s;
 	iocp_impl * impl;
 	async_service * _service;
 
 	sock_addr _remote_addr;
 	int tryconnectcount;
+	
+	static angelica::container::no_blocking_pool<unsigned int> _sock_pool;
 
-	friend class async_net::socket;
+	friend class async_net::socket_base;
+	friend class iocp_impl;
 
 };
 

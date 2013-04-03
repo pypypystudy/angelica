@@ -12,6 +12,8 @@
 #include "win32/winhdef.h"
 #endif
 
+#include <angelica/container/msque.h>
+
 #include <vector>
 #include <cstddef>
 #include <boost/atomic.hpp>
@@ -21,9 +23,6 @@
 namespace angelica {
 namespace async_net {
 namespace detail {
-
-char * CreateMemPage();
-void DestroyMemPage(char * page);
 
 class read_buff{
 public:	
@@ -41,9 +40,6 @@ public:
 	std::size_t slide;
 
 };
-
-read_buff * CreateReadBuff();
-void DestroyReadBuff(read_buff * ptr);
 
 class write_buff {
 public:
@@ -73,7 +69,6 @@ private:
 		boost::atomic_uint32_t _wsabuf_slide;
 		boost::shared_mutex _wsabuf_mu;
 #endif	//_WIN32
-	
 	};
 
 private:
@@ -92,9 +87,6 @@ private:
 	boost::atomic_flag _send_flag;
 
 };	
-
-write_buff * CreateWriteBuff();
-void DestroyWriteBuff(write_buff * ptr);
 
 } //detail
 } /* namespace async_net */

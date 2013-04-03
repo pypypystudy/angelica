@@ -5,32 +5,16 @@
  *      Author: qianqians
  */
 #include "sock_buff.h"
-#include <angelica/pool/angmalloc.h>
+#include "buff_pool.h"
 
 namespace angelica {
 namespace async_net {
 namespace detail {
 
-static unsigned int page_size = 8192;
-
-char * CreateMemPage(){
-	char * mempage = 0;
-	while((mempage = (char*)angmalloc(page_size)) == 0);
-#ifdef _DEBUG
-	memset(mempage, 0, page_size);
-#endif //_DEBUG
-
-	return mempage;
-}
-
-void DestroyMemPage(char * page){
-	angfree(page);
-}
-
 //read buff
 read_buff::read_buff(){
-	buff = CreateMemPage();
-	buff_size = page_size;
+	buff = detail::BuffPool::get(detail::page_size);
+	buff_size = detail::page_size;
 	slide = 0;
 
 #ifdef _WIN32
@@ -40,7 +24,7 @@ read_buff::read_buff(){
 }
 
 read_buff::~read_buff() {
-	DestroyMemPage(buff);
+	detail::BuffPool::release(buff, buff_size);
 }
 
 void read_buff::init() {
@@ -49,22 +33,9 @@ void read_buff::init() {
 	_wsabuf.len = 0;
 }
 
-read_buff * CreateReadBuff(){
-	read_buff * p = 0;
-	while((p = (read_buff *)angmalloc(sizeof(read_buff))) == 0);
-	::new (p) read_buff();
-
-	return p;
-}
-
-void DestryReadBuff(read_buff * ptr){
-	ptr->~read_buff();
-	angfree(ptr);
-}
-
 //write buff buffex
 write_buff::buffex::buffex() : slide(0) {
-	buff = CreateMemPage();
+	buff = detail::BuffPool::get(detail::page_size);
 	buff_size = page_size;
 	slide.store(0);
 
@@ -83,14 +54,14 @@ write_buff::buffex::~buffex() {
 #ifdef _WIN32
 	for(unsigned int i = 0; i < _wsabuf_slide.load(); i++){
 		if(buff != _wsabuf[i].buf){
-			detail::DestroyMemPage(_wsabuf[i].buf);
+			detail::BuffPool::release(_wsabuf[i].buf, _wsabuf[i].len);
 		}
 	}
 
 	delete[] _wsabuf; 
 #endif	//_WIN32
 
-	detail::DestroyMemPage(buff);
+	detail::BuffPool::release(buff, buff_size);
 }
 
 void write_buff::buffex::clear() {
@@ -102,7 +73,7 @@ void write_buff::buffex::clear() {
 #ifdef _WIN32
 	for(unsigned int i = 0; i < _wsabuf_slide.load(); i++){
 		if(buff != _wsabuf[i].buf){
-			detail::DestroyMemPage(_wsabuf[i].buf);
+			detail::BuffPool::release(_wsabuf[i].buf, _wsabuf[i].len);
 		}
 		_wsabuf[i].len = 0;
 	}
@@ -134,21 +105,13 @@ void write_buff::buffex::put_buff() {
 
 //write buff
 write_buff::write_buff(){
-	buffex * send = (buffex *)angmalloc(sizeof(buffex));
-	::new (send) buffex();
-	send_buff_.store(send);
-
-	buffex * write = (buffex *)angmalloc(sizeof(buffex));
-	::new (write) buffex();
-	write_buff_.store(write);	
+	send_buff_.store(new buffex());
+	write_buff_.store(new buffex());	
 }
 
 write_buff::~write_buff(){
-	send_buff_.load()->~buffex();
-	angfree(send_buff_.load());
-
-	write_buff_.load()->~buffex();
-	angfree(write_buff_.load());
+	delete send_buff_.load();
+	delete write_buff_.load();
 }
 
 void write_buff::init(){
@@ -186,24 +149,24 @@ void write_buff::write(char * data, std::size_t llen){
 				if (_old_slide > 0){
 					_write_buff->put_buff();
 				}else{
-					detail::DestroyMemPage(_write_buff->buff);
+					detail::BuffPool::release(_write_buff->buff, _write_buff->buff_size);
 				}
 
 				_old_slide = 0;
 				_write_buff->slide.store(0);
 				if (llen > page_size){
 					_write_buff->buff_size = (llen + 4095)/4096*4096;
-					while((_write_buff->buff = (char*)angmalloc(_write_buff->buff_size)) == 0);
 				}else{
 					_write_buff->buff_size = page_size;
-					_write_buff->buff = detail::CreateMemPage();
 				}
+				_write_buff->buff = detail::BuffPool::get(_write_buff->buff_size);
 			}
 				
 			_write_buff->slide += llen;
 			memcpy(&_write_buff->buff[_old_slide], data, llen);
 			
 			_write_buff->_mu.unlock_and_lock_upgrade();
+
 			break;
 		}else{
 			if(_write_buff->slide.compare_exchange_strong(_old_slide, _new_slide)){
@@ -259,19 +222,6 @@ bool write_buff::send_buff(){
 void write_buff::clear() {
 	send_buff_.load()->clear();
 	_send_flag.clear();
-}
-
-write_buff * CreateWriteBuff(){
-	write_buff * p = 0;
-	while((p = (write_buff *)angmalloc(sizeof(write_buff))) == 0);
-	::new (p) write_buff();
-
-	return p;
-}
-
-void DestryWriteBuff(write_buff * ptr){
-	ptr->~write_buff();
-	angfree(ptr);
 }
 
 } //detail

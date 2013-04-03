@@ -15,11 +15,7 @@ char addr[32];
 	
 class session{
 public:
-	session(angelica::async_net::async_service & service) : s(service) {
-		s.register_connect(boost::bind(&session::onConnect, this, _1));
-		s.register_recv(boost::bind(&session::onRecv, this, _1, _2, _3));
-		s.register_send(boost::bind(&session::onSend, this, _1));
-	}
+	session(angelica::async_net::async_service & service) : s(service) {}
 
 	~session(){}
 
@@ -51,8 +47,9 @@ public:
 
 		SOCKET_ADDRESS Address = pAddresses->FirstUnicastAddress->Address;
 		
-		if(s.bind(sock_addr(Address.lpSockaddr)) == 0){
-			s.async_connect(sock_addr(addr, 3311));
+		if(s.bind(sock_addr("192.168.0.102", 0)) == 0){
+			s.async_connect(sock_addr(addr, 3311), 
+				boost::bind(&session::onConnect, this, _1));
 		}
 	}
 
@@ -61,7 +58,7 @@ private:
 		if(err){
 			std::cout << "error code: " << err << std::endl;
 		}else{
-			s.start_recv();
+			s.async_recv(boost::bind(&session::onRecv, this, _1, _2, _3), true);
 		}
 	}
 
@@ -69,7 +66,7 @@ private:
 		if(err){
 			std::cout << "error code: " << err << std::endl;
 		}else{
-			s.async_send(buff, lenbuff);
+			s.async_send(buff, lenbuff, boost::bind(&session::onSend, this, _1));
 		}
 	}
 
@@ -95,7 +92,7 @@ int main(){
 	fin.getline(addr, 33);
 	std::cout << addr << std::endl;
 
-	for(int i = 0; i < 1000; i++){
+	for(int i = 0; i < 3000; i++){
 		s[i] = new session(service);
 		s[i]->start();
 	}
@@ -112,7 +109,7 @@ int main(){
 
 	service.stop();
 
-	for(int i = 0; i < 1000; i++){
+	for(int i = 0; i < 3000; i++){
 		delete s[i];
 	}
 

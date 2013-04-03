@@ -16,6 +16,10 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/atomic.hpp>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 namespace angelica {
 namespace container {
 
@@ -34,6 +38,7 @@ public:
 		_count = info.dwNumberOfProcessors;
 #endif
 
+		_size.store(0);
 		_pool = new mirco_pool[_count];
 	}
 
@@ -42,20 +47,19 @@ public:
 	}
 
 	T * pop(){
-		unsigned int slide = 0;
 		T * ret = 0;
 
 		while(_size.load() != 0){
 			for(unsigned int i = 0; i < _count; i++){
-				boost::mutex::scoped_lock lock(_pool[slide]._mu, boost::try_to_lock);
+				boost::mutex::scoped_lock lock(_pool[i]._mu, boost::try_to_lock);
 				if (lock.owns_lock()){
-					if (!_pool[slide]._pool.empty()){
-						ret = _pool[slide]._pool.front();
-						_pool[slide]._pool.pop_front();
+					if (!_pool[i]._pool.empty()){
+						ret = _pool[i]._pool.front();
+						_pool[i]._pool.pop_front();
+						_size--;
 
-						break;
+						return ret;
 					}
-					continue;
 				}
 			}
 		}

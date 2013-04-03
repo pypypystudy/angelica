@@ -40,12 +40,12 @@ iocp_impl::iocp_impl() : thread_count(0) {
 		throw boost::throw_function(error_info.c_str());
 	}
 
-	detail::InitWin32SOCKETPool();
+	detail::OverlappedEXPool<OverlappedEX >::Init();
+	detail::OverlappedEXPool<OverlappedEX_close>::Init();
+	detail::OverlappedEXPool<OverlappedEX_Accept >::Init();
 }
 
 iocp_impl::~iocp_impl() {
-	detail::DestroyWin32SOCKETPool();
-
 	CloseHandle(hIOCP);
 	WSACleanup();
 }
@@ -79,7 +79,7 @@ DWORD WINAPI iocp_impl::serverwork(void * impl) {
 		while(_service->do_one());
 
 		DWORD nBytesTransferred = 0;
-		void* pHandle = 0;
+		base_socket_win32 * pHandle = 0;
 		LPOVERLAPPED pOverlapped = 0;
 		_error_code err = 0;
 
@@ -89,12 +89,29 @@ DWORD WINAPI iocp_impl::serverwork(void * impl) {
 		}
 			
 		OverlappedEX * pOverlappedEX = container_of(pOverlapped, OverlappedEX, overlap);
-		if(pOverlappedEX->isstop == 1){
-			detail::DestroyOverlapped(pOverlappedEX);
+		if (pOverlappedEX->type == win32_tcp_send_complete){
+			pHandle->OnSend(err);
+			detail::OverlappedEXPool<OverlappedEX >::release(pOverlappedEX);
+		}else if (pOverlappedEX->type == win32_tcp_recv_complete){
+			pHandle->OnRecv(nBytesTransferred, err);
+			detail::OverlappedEXPool<OverlappedEX >::release(pOverlappedEX);
+		}else if (pOverlappedEX->type == win32_tcp_connect_complete){
+			pHandle->OnConnect(err);
+			detail::OverlappedEXPool<OverlappedEX >::release(pOverlappedEX);
+		}else if (pOverlappedEX->type == win32_tcp_accept_complete){
+			OverlappedEX_Accept * _OverlappedEXAccept = container_of(pOverlappedEX, OverlappedEX_Accept, overlapex);
+			pHandle->OnAccept(_OverlappedEXAccept->socket_, nBytesTransferred, err);
+			detail::OverlappedEXPool<OverlappedEX_Accept >::release(_OverlappedEXAccept);
+		}else if (pOverlappedEX->type == win32_tcp_disconnect_complete){
+			pHandle->onDeconnect(err);
+			detail::OverlappedEXPool<OverlappedEX >::release(pOverlappedEX);
+		}else if (pOverlappedEX->type == win32_tcp_close_complete){
+			OverlappedEX_close * _OverlappedEXClose = container_of(pOverlappedEX, OverlappedEX_close, overlapex);
+			pHandle->onClose(_OverlappedEXClose->fd);
+			detail::OverlappedEXPool<OverlappedEX >::release(pOverlappedEX);
+		}else if (pOverlappedEX->type == win32_stop_){
+			detail::OverlappedEXPool<OverlappedEX >::release(pOverlappedEX);
 			break;
-		}else{
-			pOverlappedEX->fn_onHandle(nBytesTransferred, err);
-			detail::DestroyOverlapped(pOverlappedEX);
 		}
 	}
 	
@@ -105,8 +122,8 @@ DWORD WINAPI iocp_impl::serverwork(void * impl) {
 
 void iocp_impl::stop(){
 	for(unsigned int i = 0; i < current_num; i++) {
-		OverlappedEX * olp = detail::CreateOverlapped();
-		olp->isstop = 1;
+		OverlappedEX * olp = detail::OverlappedEXPool<OverlappedEX >::get();
+		olp->type = win32_stop_;
 		PostQueuedCompletionStatus(this->hIOCP, 0, 0, &olp->overlap);
 	}
 
