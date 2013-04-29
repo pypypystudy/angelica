@@ -7,8 +7,8 @@
 #ifndef _ASYNC_NET_H
 #define _ASYNC_NET_H
 
-#include "async_service.h"
 #include "socket.h"
 #include "sock_addr.h"
+#include "async_service.h"
 
 #endif //_ASYNC_NET_H

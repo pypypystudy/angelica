@@ -41,7 +41,7 @@ private:
 	unsigned int buff_llen;
 	
 public:
-	void onSend(int err){
+	void onSend(char * buff, int llen, int err){
 		if (!err){
 			Sendcount++; 
 		}else{
@@ -80,6 +80,7 @@ private:
 							  << " testend: " << end << std::endl;
 					_mu.unlock();
 				}
+				
 			}else{
 				Session * s = 0;
 				_mu.lock();
@@ -90,7 +91,7 @@ private:
 				_mu.unlock();
 				
 				if (s != 0){
-					s->s.async_send((char*)msg_, sizeof(msg), boost::bind(&Session::onSend, s, _1));
+					s->s.async_send((char*)msg_, sizeof(msg), boost::bind(&Session::onSend, s, _1, _2, _3));
 				}
 			}
 
@@ -182,7 +183,7 @@ void dotest(){
 		_mu.unlock();
 				
 		if (s != 0){
-			s->s.async_send((char*)&msg, sizeof(msg), boost::bind(&Session::onSend, s, _1));
+			s->s.async_send((char*)&msg, sizeof(msg), boost::bind(&Session::onSend, s, _1, _2, _3));
 		}
 	}
 }

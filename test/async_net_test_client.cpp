@@ -2,7 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include "Iphlpapi.h"
-	
+
 #include "msgh.h"
 	
 #pragma comment(lib, "async_net.lib")
@@ -47,7 +47,7 @@ public:
 
 		SOCKET_ADDRESS Address = pAddresses->FirstUnicastAddress->Address;
 		
-		if(s.bind(sock_addr("192.168.0.102", 0)) == 0){
+		if(s.bind(sock_addr(addr, 0)) == 0){
 			s.async_connect(sock_addr(addr, 3311), 
 				boost::bind(&session::onConnect, this, _1));
 		}
@@ -66,11 +66,11 @@ private:
 		if(err){
 			std::cout << "error code: " << err << std::endl;
 		}else{
-			s.async_send(buff, lenbuff, boost::bind(&session::onSend, this, _1));
+			s.async_send(buff, lenbuff, boost::bind(&session::onSend, this, _1, _2, _3));
 		}
 	}
 
-	void onSend(int err){
+	void onSend(char * buff, unsigned int lenbuff, int err){
 		if(err){
 			std::cout << "error code: " << err << std::endl; 
 		}

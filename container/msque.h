@@ -79,7 +79,6 @@ public:
 				continue;
 			}
 
-			_list_node * _begin_node = __list.load()->_begin.load();
 			_list_node * next = _hp->_hazard->_next.load();
 
 			if(_hp->_hazard != __list.load()->_end.load()){
@@ -143,6 +142,7 @@ public:
 			}
 		}
 		data = _hp_next->_hazard->data;
+		_hp_next->_hazard->~_list_node();
 		_hazard_sys.retire(_hp_begin->_hazard, boost::bind(&angelica::container::msque<T>::put_node, this, _1));
 
 		__list.load()->_size--;
@@ -180,7 +180,7 @@ private:
 
 	_list_node * get_node(const T & data){
 		_list_node * _node = __node_alloc.allocate(1);
-		_node->data = data;
+		new (_node) _list_node(data);
 		_node->_next = 0;
 		
 		return _node;

@@ -20,8 +20,13 @@
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/pool/pool_alloc.hpp>
 
+#include "angelica/async_net/socket_base.h"
+
 namespace angelica {
 namespace async_net {
+
+typedef boost::function<void(_error_code err) > SendHandleEx;
+
 namespace detail {
 
 class read_buff{
@@ -62,6 +67,8 @@ private:
 		boost::atomic_uint32_t slide;
 
 		boost::shared_mutex _mu;
+
+		angelica::container::msque<SendHandleEx> queSendHandle;
 		
 #ifdef _WIN32
 		WSABUF * _wsabuf;
@@ -78,7 +85,7 @@ public:
 	boost::atomic<buffex * > send_buff_;
 
 public:	
-	void write(char * data, std::size_t llen);
+	void write(char * data, std::size_t llen, SendHandle onSendHandle);
 
 	bool send_buff();
 	void clear();

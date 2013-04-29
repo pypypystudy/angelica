@@ -7,18 +7,19 @@
 #ifndef _NET_SERVICE_H
 #define _NET_SERVICE_H
 
-#ifdef _WIN32
-#include "win32\iocp_impl.h"
-#endif 
-
+#include <boost/thread.hpp>
 #include <boost/function.hpp>
+
 #include <angelica/container/swapque.h>
 #include <angelica/container/no_blocking_pool.h>
 
+#include "error_code.h"
+
 namespace angelica { 
 namespace async_net { 
-
-class socket_base;
+namespace win32 { 
+class socket_base_win32;
+}// win32
 
 typedef boost::function<void()> fnHandle;
 
@@ -32,23 +33,25 @@ public:
 
 	void post(fnHandle fn);
 
+private:
+	void serverwork();
 	bool do_one();
 
 private:
-#ifdef _WIN32	
-	friend class win32::base_socket_win32;
-	friend class win32::iocp_impl;
+#ifdef _WIN32
+	HANDLE hIOCP;
+	friend class win32::socket_base_win32;
+#endif //_WIN32
 
-	win32::iocp_impl _impl;
-#endif
+	unsigned int current_num;
+
+	boost::thread_group _th_group;
+	boost::atomic_uint32_t thread_count;
 	
 	boost::atomic_ulong nConnect;
 	unsigned long nMaxConnect;
 
 	angelica::container::swapque<fnHandle > event_que;
-		
-	friend class socket_base;
-	friend class base_socket_win32;
 
 }; 
 

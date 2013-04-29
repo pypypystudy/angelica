@@ -1,41 +1,13 @@
 /*
- * async_service.h
+ * async_service.cpp
  *   Created on: 2012-11-14
  *       Author: qianqians
  * async_service
  */
 #include "async_service.h"
-#include "socket.h"
-#include "sock_buff.h"
-#include "socket_pool.h"
-#include "buff_pool.h"
-#include "read_bufff_pool.h"
-#include "write_buff_pool.h"
 
 namespace angelica { 
 namespace async_net { 
-
-async_service::async_service() : nConnect(0), nMaxConnect(0) {
-	detail::SocketPool::Init();
-	detail::BuffPool::Init(detail::page_size);
-	detail::ReadBuffPool::Init();
-	detail::WriteBuffPool::Init();
-}
-
-async_service::~async_service(){
-}
-
-void async_service::start(unsigned int nCurrentNum){
-#ifdef _WIN32
-	_impl.start(nCurrentNum);
-#endif
-}
-
-void async_service::stop(){
-#ifdef _WIN32
-	_impl.stop();
-#endif	
-}
 
 void async_service::post(fnHandle fn){
 	event_que.push(fn);
@@ -49,6 +21,18 @@ bool async_service::do_one(){
 	}
 
 	return false;
+}
+
+void async_service::start(unsigned int nCurrentNum) {
+	if (nCurrentNum == 0){
+		nCurrentNum = current_num;
+	}
+
+	for (unsigned int i = 0; i < nCurrentNum; i++) {
+		if (_th_group.create_thread(boost::bind(&async_service::serverwork, this)) == 0){
+			BOOST_THROW_EXCEPTION(std::logic_error("Error: CreateThread failed. "));
+		}
+	}
 }
 
 } //async_net

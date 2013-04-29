@@ -12,6 +12,9 @@
 
 namespace angelica {
 namespace async_net {
+namespace win32 {
+class socket_base_win32;
+} // win32
 
 class socket{
 public:
@@ -32,19 +35,20 @@ public:
 
 	int disconnect();
 
-	int async_accpet(int num, boost::function<void(socket s, sock_addr & addr, _error_code err)> onAccpet, bool bflag);
+	int async_accpet(int num, AcceptHandle onAccpet, bool bflag);
 
-	int async_recv(boost::function<void(char * buff, unsigned int lenbuff, _error_code err) > onRecv, bool bflag);
+	int async_recv(RecvHandle onRecv, bool bflag);
 	
-	int async_connect(sock_addr addr, boost::function<void(_error_code err)> onConnect);
+	int async_connect(sock_addr addr, ConnectHandle onConnect);
 
-	int async_send(char * buff, unsigned int lenbuff, boost::function<void(_error_code err) > onSend);
+	int async_send(char * buff, unsigned int lenbuff, SendHandle onSend);
 
 private:
 	socket_base * _socket;
 	boost::atomic_uint * _ref;
 
-	friend class win32::base_socket_win32;
+	friend class async_service;
+	friend class win32::socket_base_win32;
 
 };
 

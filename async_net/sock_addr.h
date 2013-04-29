@@ -7,20 +7,17 @@
 #ifndef _address_h
 #define _address_h
 
-#include <string>
-
 #ifdef _WIN32
 #include "win32/winhdef.h"
 #endif
 
+#include <string>
+
 namespace angelica {
 namespace async_net {
-
-#ifdef _WIN32
 namespace win32 {
-class base_socket_win32;
-}//win32
-#endif //_WIN32
+class socket_base_win32;
+} // win32
 
 class sock_addr {
 private:
@@ -42,10 +39,8 @@ public:
 	std::string address();
 	unsigned short port();
 
-private:
-#ifdef _WIN32
-	friend class win32::base_socket_win32;
-#endif
+	friend class win32::socket_base_win32;
+	friend class async_service;
 
 };
 

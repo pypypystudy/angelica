@@ -7,9 +7,7 @@
 #ifndef _SOCKET_BASE_H
 #define _SOCKET_BASE_H
 
-#ifdef _WIN32
-#include "win32\base_socket_win32.h"
-#endif 
+#include "sock_addr.h"
 
 #include <boost/function.hpp>
 #include <boost/atomic.hpp>
@@ -27,8 +25,12 @@ class write_buff;
 class read_buff;
 } //detail
 
-class sock_addr;
 class socket;
+
+typedef boost::function<void(socket s, sock_addr & addr, _error_code err)> AcceptHandle;
+typedef boost::function<void(char * buff, unsigned int lenbuff, _error_code err) > RecvHandle;
+typedef boost::function<void(_error_code err)> ConnectHandle;
+typedef boost::function<void(char * buff, unsigned int lenbuff, _error_code err) > SendHandle;
 
 class socket_base {
 public:
@@ -37,38 +39,27 @@ public:
 
 private:
 	socket_base(){};
-
 	socket_base(const socket_base & s){};
 	void operator =(const socket_base & s){};
 
 public:
-	int bind(sock_addr addr);
+	virtual int bind(sock_addr addr) = 0;
 	
-	int closesocket();
+	virtual int closesocket() = 0;
 
-	int disconnect();
+	virtual int disconnect() = 0;
 
-public:
-	int async_accpet(int num, boost::function<void(socket s, sock_addr & addr, _error_code err)> onAccpet, bool bflag);
+	virtual int async_accpet(int num, AcceptHandle onAccpet, bool bflag) = 0;
 
-	int async_recv(boost::function<void(char * buff, unsigned int lenbuff, _error_code err) > onRecv, bool bflag);
+	virtual int async_recv(RecvHandle onRecv, bool bflag) = 0;
 	
-	int async_connect(sock_addr addr, boost::function<void(_error_code err)> onConnect);
+	virtual int async_connect(sock_addr addr, ConnectHandle onConnect) = 0;
 
-	int async_send(char * buff, unsigned int lenbuff, boost::function<void(_error_code err) > onSend);
-	
-private:
-	boost::function<void (socket s, sock_addr & addr, _error_code err) > fn_onAccpet;
-	boost::function<void (_error_code err) > fn_onConnect;
-	boost::function<void (char * buff, unsigned int lenbuff, _error_code err) > fn_onRecv;
-	boost::function<void (_error_code err) > fn_onSend;
+	virtual int async_send(char * buff, unsigned int lenbuff, SendHandle onSend) = 0;
 
-private:
-#ifdef _WIN32
-	friend class win32::base_socket_win32;
-	win32::base_socket_win32 fd;
-#endif
-	
+protected:
+	sock_addr _remote_addr;
+
 	detail::read_buff * _read_buff;
 	detail::write_buff * _write_buff;
 	
@@ -76,12 +67,10 @@ private:
 	bool isdisconnect;
 	bool isrecv;
 	bool isaccept;
-	
+
+	int tryconnectcount;
+
 	async_service * _service;
-	
-private:
-	friend class async_service;
-	friend class socket;
 
 };		
 	
