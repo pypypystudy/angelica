@@ -29,7 +29,7 @@ class socket;
 
 typedef boost::function<void(socket s, sock_addr & addr, _error_code err)> AcceptHandle;
 typedef boost::function<void(char * buff, unsigned int lenbuff, _error_code err) > RecvHandle;
-typedef boost::function<void(_error_code err)> ConnectHandle;
+typedef boost::function<void(_error_code err) > ConnectHandle;
 typedef boost::function<void(char * buff, unsigned int lenbuff, _error_code err) > SendHandle;
 
 class socket_base {
@@ -43,21 +43,43 @@ private:
 	void operator =(const socket_base & s){};
 
 public:
+	void register_accpet_handle(AcceptHandle onAccpet);
+
+	void register_recv_handle(RecvHandle onRecv);
+	
+	void register_connect_handle(ConnectHandle onConnect);
+	
+	void register_send_handle(SendHandle onSend);
+
+public:
 	virtual int bind(sock_addr addr) = 0;
 	
 	virtual int closesocket() = 0;
 
 	virtual int disconnect() = 0;
 
-	virtual int async_accpet(int num, AcceptHandle onAccpet, bool bflag) = 0;
+	virtual int async_accpet(int num, bool bflag) = 0;
 
-	virtual int async_recv(RecvHandle onRecv, bool bflag) = 0;
+	virtual int async_accpet(bool bflag) = 0;
+
+	virtual int async_recv(bool bflag) = 0;
 	
-	virtual int async_connect(sock_addr addr, ConnectHandle onConnect) = 0;
+	virtual int async_connect(sock_addr addr) = 0;
 
-	virtual int async_send(char * buff, unsigned int lenbuff, SendHandle onSend) = 0;
+	virtual int async_send(char * buff, unsigned int lenbuff) = 0;
+
+	sock_addr get_remote_addr(){return _remote_addr;}
 
 protected:
+	boost::atomic_flag flagAcceptHandle;
+	AcceptHandle onAcceptHandle;
+	boost::atomic_flag flagRecvHandle;
+	RecvHandle onRecvHandle;
+	boost::atomic_flag flagConnectHandle;
+	ConnectHandle onConnectHandle;
+	boost::atomic_flag flagSendHandle;
+	ConnectHandle onSendHandle;
+
 	sock_addr _remote_addr;
 
 	detail::read_buff * _read_buff;

@@ -121,7 +121,7 @@ void write_buff::init(){
 	_send_flag.clear();
 }
 
-void write_buff::write(char * data, std::size_t llen, SendHandle onSendHandle){
+void write_buff::write(char * data, std::size_t llen){
 	buffex * _write_buff = 0;
 	while(1){
 		_write_buff = write_buff_.load();
@@ -164,7 +164,6 @@ void write_buff::write(char * data, std::size_t llen, SendHandle onSendHandle){
 				
 			_write_buff->slide += llen;
 			memcpy(&_write_buff->buff[_old_slide], data, llen);
-			_write_buff->queSendHandle.push(boost::bind(onSendHandle, &_write_buff->buff[_old_slide], llen, _1));
 			
 			_write_buff->_mu.unlock_and_lock_upgrade();
 			
@@ -172,7 +171,6 @@ void write_buff::write(char * data, std::size_t llen, SendHandle onSendHandle){
 		}else{
 			if(_write_buff->slide.compare_exchange_strong(_old_slide, _new_slide)){
 				memcpy(&_write_buff->buff[_old_slide], data, llen);
-				_write_buff->queSendHandle.push(boost::bind(onSendHandle, &_write_buff->buff[_old_slide], llen, _1));
 				break;
 			}
 		}

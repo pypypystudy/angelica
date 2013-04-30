@@ -36,7 +36,8 @@ public:
 
 	void operator =(const sock_addr & addr);
 
-	std::string address();
+	std::string str_address();
+	unsigned int int_address();
 	unsigned short port();
 
 	friend class win32::socket_base_win32;

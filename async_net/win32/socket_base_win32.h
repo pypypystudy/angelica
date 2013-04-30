@@ -37,13 +37,15 @@ public:
 
 	int disconnect();
 
-	int async_accpet(int num, AcceptHandle onAccpet, bool bflag);
+	int async_accpet(int num, bool bflag);
 
-	int async_recv(RecvHandle onRecv, bool bflag);
+	int async_accpet(bool bflag);
 	
-	int async_connect(sock_addr addr, ConnectHandle onConnect);
+	int async_recv(bool bflag);
+	
+	int async_connect(sock_addr addr);
 
-	int async_send(char * buff, unsigned int lenbuff, SendHandle onSend);
+	int async_send(char * buff, unsigned int lenbuff);
 
 public:
 	void OnAccept(socket_base * sClient, DWORD llen, _error_code err);
@@ -56,7 +58,7 @@ public:
 	
 	void onDeconnect(_error_code err);
 	
-	static void onClose(SOCKET fd);
+	void onClose();
 
 private:
 	int do_async_accpet();
@@ -68,14 +70,6 @@ private:
 	int do_async_connect();
 
 	int do_disconnect(LPOVERLAPPED povld);
-
-private:
-	boost::atomic_flag flagAcceptHandle;
-	AcceptHandle onAcceptHandle;
-	boost::atomic_flag flagRecvHandle;
-	RecvHandle onRecvHandle;
-	boost::atomic_flag flagConnectHandle;
-	ConnectHandle onConnectHandle;
 
 private:
 	SOCKET fd;

@@ -38,8 +38,14 @@ void sock_addr::operator=(const sock_addr & addr){
 #endif	
 }
 
-std::string sock_addr::address() {
+std::string sock_addr::str_address() {
 	return str_addr;
+}
+
+unsigned int sock_addr::int_address(){
+#ifdef _WIN32
+	return sin_addr.S_un.S_addr;
+#endif //_WIN32
 }
 
 unsigned short sock_addr::port() {

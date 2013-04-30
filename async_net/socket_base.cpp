@@ -35,5 +35,29 @@ socket_base::~socket_base(){
 	}
 }
 
+void socket_base::register_accpet_handle(AcceptHandle onAccpet){
+	if (!flagAcceptHandle.test_and_set()){
+		onAcceptHandle = onAccpet;
+	}
+}
+
+void socket_base::register_recv_handle(RecvHandle onRecv){
+	if(!flagRecvHandle.test_and_set()){
+		onRecvHandle = onRecv;
+	}
+}
+	
+void socket_base::register_connect_handle(ConnectHandle onConnect){
+	if (!flagConnectHandle.test_and_set()){
+		onConnectHandle = onConnect;
+	}
+}
+	
+void socket_base::register_send_handle(SendHandle onSend){
+	if(!flagSendHandle.test_and_set()){
+		onSendHandle = onSend;
+	}
+}
+
 } //async_net
 } //angelica

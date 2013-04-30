@@ -97,7 +97,7 @@ void async_service::serverwork() {
 			win32::detail::OverlappedEXPool<win32::OverlappedEX_Accept >::release(_OverlappedEXAccept);
 		}else if (pOverlappedEX->type == win32_tcp_close_complete){
 			win32::OverlappedEX_close * _OverlappedEXClose = container_of(pOverlappedEX, win32::OverlappedEX_close, overlapex);
-			((win32::socket_base_win32*)pHandle)->onClose(_OverlappedEXClose->fd);
+			((win32::socket_base_win32*)pHandle)->onClose();
 			win32::detail::OverlappedEXPool<win32::OverlappedEX_close >::release(_OverlappedEXClose);
 		}else if (pOverlappedEX->type == win32_stop_){
 			win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);

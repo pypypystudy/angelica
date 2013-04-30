@@ -5,7 +5,11 @@
  * socket ½Ó¿Ú
  */
 #include "socket.h"
+#include "socket_pool.h"
+
+#ifdef _WIN32
 #include "win32/socket_base_win32.h"
+#endif //_WIN32
 
 namespace angelica {
 namespace async_net {
@@ -15,7 +19,7 @@ socket::socket(){
 }
 
 socket::socket(async_service & _impl){
-	_socket = new win32::socket_base_win32(_impl);
+	_socket = async_net::detail::SocketPool::get(_impl);
 	_ref = new boost::atomic_uint(1);
 }
 
@@ -28,13 +32,14 @@ socket::socket(const socket & _s){
 socket::~socket(){
 	_ref->operator--();
 	if (*_ref == 0){
-		delete _socket;
+		async_net::detail::SocketPool::release(_socket);
 	}
 }
 
 void socket::operator =(const socket & _s){
 	_s._ref->operator++();
 	_socket = _s._socket;
+	_ref->operator--();
 	_ref = _s._ref;
 }
 
@@ -50,12 +55,16 @@ int socket::disconnect(){
 	return _socket->disconnect();
 }
 
-int socket::async_accpet(int num, AcceptHandle onAccpet, bool bflag){
-	return _socket->async_accpet(num, onAccpet, bflag);
+int socket::async_accpet(int num, bool bflag){
+	return _socket->async_accpet(num, bflag);
 }
 
-int socket::async_recv(RecvHandle onRecv, bool bflag){
-	return _socket->async_recv(onRecv, bflag);
+int socket::async_accpet(bool bflag){
+	return _socket->async_accpet(bflag);
+}
+
+int socket::async_recv(bool bflag){
+	return _socket->async_recv(bflag);
 }
 	
 int socket::async_connect(sock_addr addr, ConnectHandle onConnect){
@@ -64,6 +73,10 @@ int socket::async_connect(sock_addr addr, ConnectHandle onConnect){
 
 int socket::async_send(char * buff, unsigned int lenbuff, SendHandle onSend){
 	return _socket->async_send(buff, lenbuff, onSend);
+}
+
+sock_addr socket::get_remote_addr(){
+	return _socket->get_remote_addr();
 }
 
 } //async_net

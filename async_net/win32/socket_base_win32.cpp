@@ -89,6 +89,7 @@ socket_base_win32::socket_base_win32(async_service & _impl) :
 }
 
 socket_base_win32::~socket_base_win32(){
+	Releasefd(fd);
 }
 
 int socket_base_win32::bind(sock_addr addr){
@@ -147,12 +148,16 @@ void socket_base_win32::onDeconnect(_error_code err){
 	if (!err){
 		isrecv = false;
 		isaccept = false;
+
+		onAcceptHandle.clear();
+		onRecvHandle.clear();
+		onConnectHandle.clear();
 	}
 }
 
 int socket_base_win32::closesocket(){
 	if (isdisconnect){
-		onClose(fd);
+		onClose();
 	}else{
 		CancelIo((HANDLE)fd);
 
@@ -166,8 +171,10 @@ int socket_base_win32::closesocket(){
 	return socket_succeed;
 }
 
-void socket_base_win32::onClose(SOCKET fd){
-	Releasefd(fd);
+void socket_base_win32::onClose(){
+	onAcceptHandle.clear();
+	onRecvHandle.clear();
+	onConnectHandle.clear();
 }
 
 int socket_base_win32::do_async_accpet(){
@@ -195,7 +202,7 @@ int socket_base_win32::do_async_accpet(){
 	return socket_succeed;
 }
 
-int socket_base_win32::async_accpet(int num, AcceptHandle _onAccpet, bool bflag){
+int socket_base_win32::async_accpet(int num, bool bflag){
 	int ret = socket_succeed;
 
 	if (bflag == true) {
@@ -217,10 +224,6 @@ int socket_base_win32::async_accpet(int num, AcceptHandle _onAccpet, bool bflag)
 					return WSAGetLastError();
 				} 
 			}
-
-			if (!flagAcceptHandle.test_and_set()){
-				onAcceptHandle = _onAccpet;
-			}
 	
 			_error_code ret = socket_succeed;
 
@@ -232,7 +235,13 @@ int socket_base_win32::async_accpet(int num, AcceptHandle _onAccpet, bool bflag)
 				}
 			}
 		}
-	}else{
+	}
+
+	return ret;
+}
+
+int socket_base_win32::async_accpet(bool bflag){
+	if (bflag == false){
 		if(isclosed){
 			return is_closed;
 		}else if(!isdisconnect){
@@ -242,12 +251,10 @@ int socket_base_win32::async_accpet(int num, AcceptHandle _onAccpet, bool bflag)
 		}
 	}
 
-	return ret;
+	return socket_succeed;
 }
 
 void socket_base_win32::OnAccept(socket_base * sClient, DWORD llen, _error_code err) {
-	sock_addr addr;
-
 	if ((_service->nConnect++ < _service->nMaxConnect) && isaccept){
 		do_async_accpet();
 	}
@@ -286,7 +293,7 @@ void socket_base_win32::OnAccept(socket_base * sClient, DWORD llen, _error_code 
 				DWORD err = WSAGetLastError();
 			}
 
-			addr = remote_addr;
+			((socket_base_win32*)sClient)->_remote_addr = remote_addr;
 
 			((socket_base_win32*)sClient)->isdisconnect = false;
 		}
@@ -295,11 +302,11 @@ void socket_base_win32::OnAccept(socket_base * sClient, DWORD llen, _error_code 
 	socket socket_;
 	socket_._socket = sClient;
 	if (!onAcceptHandle.empty()){
-		onAcceptHandle(socket_, addr, err);
+		onAcceptHandle(socket_, ((socket_base_win32*)sClient)->_remote_addr, err);
 	}
 }
 
-int socket_base_win32::async_recv(RecvHandle _onRecv, bool bflag){
+int socket_base_win32::async_recv(bool bflag){
 	if (bflag == true){
 		if(isclosed){
 			return is_closed;
@@ -309,10 +316,6 @@ int socket_base_win32::async_recv(RecvHandle _onRecv, bool bflag){
 		
 		if (!isrecv){
 			isrecv = true;
-
-			if(!flagRecvHandle.test_and_set()){
-				onRecvHandle = _onRecv;
-			}
 
 			if (_read_buff->slide > 0){
 				if (!onRecvHandle.empty()){
@@ -331,8 +334,6 @@ int socket_base_win32::async_recv(RecvHandle _onRecv, bool bflag){
 		}else{
 			isrecv = false;
 		}
-
-		return socket_succeed;
 	}
 
 	return socket_succeed;
@@ -408,14 +409,14 @@ void socket_base_win32::OnRecv(DWORD llen, _error_code err) {
 	}
 }	
 
-int socket_base_win32::async_send(char * buff, unsigned int lenbuff, SendHandle onSend){
+int socket_base_win32::async_send(char * buff, unsigned int lenbuff){
 	if(isclosed){
 		return is_closed;
 	}else if(isdisconnect){
 		return is_disconnected;
 	}
 
-	_write_buff->write(buff, lenbuff, onSend);
+	_write_buff->write(buff, lenbuff);
 
 	return do_async_send();
 }
@@ -449,35 +450,25 @@ void socket_base_win32::OnSend(_error_code err){
 	if (!err){
 		_write_buff->clear();
 
-		SendHandleEx onSendHandle;
-		while(_write_buff->send_buff_.load()->queSendHandle.pop(onSendHandle)){
-			if (!onSendHandle.empty()){
-				onSendHandle(err);
-			}
+		if (!onSendHandle.empty()){
+			onSendHandle(err);
 		}
-
+	
 		err = do_async_send();
 	}
 
 	if (err){
-		SendHandleEx onSendHandle;
-		if(_write_buff->send_buff_.load()->queSendHandle.pop(onSendHandle)){
-			if (!onSendHandle.empty()){
-				onSendHandle(err);
-			}
+		if (!onSendHandle.empty()){
+			onSendHandle(err);
 		}
 	}
 }	
 
-int socket_base_win32::async_connect(sock_addr addr, ConnectHandle onConnect){
+int socket_base_win32::async_connect(sock_addr addr){
 	if(isclosed){
 		return is_closed;
 	}else if(!isdisconnect){
 		return is_connected;
-	}
-
-	if (!flagConnectHandle.test_and_set()){
-		onConnectHandle = onConnect;
 	}
 
 	_remote_addr = addr;

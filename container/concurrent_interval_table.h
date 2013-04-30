@@ -54,8 +54,31 @@ public:
 			put_map((_map *)_hash_array[i]._hash_bucket.load());
 		}
 	}
+
+	bool set(K key, V value){
+		unsigned int hash_value = hash(key, mask);
+		bucket * _bucket = (bucket *)&_hash_array[hash_value];
+		
+		shared_lock(_bucket->_rw_flag);
+		
+		_map * _map_ = (_map *)_bucket->_hash_bucket.load();
+		_map::iterator iter = _map_->find(key);
+		if (iter == _map_->end()){
+			return false;
+		}
+		
+		if (!lock_unique(iter->second->_rw_flag)){
+			return false;
+		}
+		iter->second->value = value;
+		unlock_unique(iter->second->_rw_flag);
+
+		unlock_shared(_bucket->_rw_flag);
+
+		return true;
+	}
 	
-	void insert(K key, V value){
+	bool insert(K key, V value){
 		unsigned int hash_value = hash(key, mask);
 		bucket * _bucket = (bucket *)&_hash_array[hash_value];
 		while(1){
@@ -69,10 +92,18 @@ public:
 				iter = _map_->find(key);
 			}
 			if (_map_ != 0 && iter != _map_->end()){
-				lock_unique(iter->second->_rw_flag);
-				iter->second->value = value;
-				unlock_unique(iter->second->_rw_flag);
-				unlock_upgrad(_bucket->_rw_flag);
+				if (!lock_unique(iter->second->_rw_flag)){
+					int old = -2147483647;
+					if (iter->second->_rw_flag.compare_exchange_weak(old, 1)){
+						iter->second->value = value;
+						unlock_unique(iter->second->_rw_flag);
+						unlock_upgrad(_bucket->_rw_flag);
+					}
+				}else{
+					unlock_upgrad(_bucket->_rw_flag);
+
+					return false;
+				}
 			}else{
 				if (!unlock_upgrad_and_lock(_bucket->_rw_flag)){
 					continue;
@@ -86,9 +117,18 @@ public:
 				_map_ = (_map *)_bucket->_hash_bucket.load();
 				_map::iterator iter = _map_->find(key);
 				if (iter != _map_->end()){
-					lock_unique(iter->second->_rw_flag);
-					iter->second->value = value;
-					unlock_unique(iter->second->_rw_flag);
+					if (!lock_unique(iter->second->_rw_flag)){
+						int old = -2147483647;
+						if (iter->second->_rw_flag.compare_exchange_weak(old, 1)){
+							iter->second->value = value;
+							unlock_unique(iter->second->_rw_flag);
+							unlock_unique(_bucket->_rw_flag);
+						}
+					}else{
+						unlock_unique(_bucket->_rw_flag);
+
+						return false;
+					}
 				}else{
 					node * _node = get_node();
 					_node->value = value;
@@ -103,6 +143,8 @@ public:
 		}
 
 		_size++;
+
+		return true;
 	}
 
 	bool search(K key, V &value){
@@ -112,6 +154,10 @@ public:
 		shared_lock(_bucket->_rw_flag);
 		
 		_map * _map_ = (_map *)_bucket->_hash_bucket.load();
+		if (_map_ == 0){
+			return false;
+		}
+
 		_map::iterator iter = _map_->find(key);
 		if (iter == _map_->end()){
 			return false;
@@ -128,24 +174,26 @@ public:
 		return true;
 	}
 
-	bool erase(K key, V value){
+	bool erase(K key){
 		unsigned int hash_value = hash(key, mask);
-		bucket * _bucket = (bucket *)&_hash_array[hash_key];
+		bucket * _bucket = (bucket *)&_hash_array[hash_value];
 		
 		shared_lock(_bucket->_rw_flag);
 		
 		_map * _map_ = (_map *)_bucket->_hash_bucket.load();
+		if (_map_ == 0){
+			return false;
+		}
+
 		_map::iterator iter = _map_->find(key);
 		if (iter == _map_->end()){
 			return false;
 		}
 		
-		if (iter->second._rw_flag){
-			if (!lock_unique(iter->second->_rw_flag)){
-				return false;
-			}
-			iter->second->_rw_flag.store(-2147483647);
+		if (!lock_unique(iter->second->_rw_flag)){
+			return false;
 		}
+		iter->second->_rw_flag.store(-2147483647);
 
 		unlock_shared(_bucket->_rw_flag);
 

@@ -29,19 +29,32 @@ private:
 	socket();
 
 public:
+	void register_accpet_handle(AcceptHandle onAccpet);
+
+	void register_recv_handle(RecvHandle onRecv);
+	
+	void register_connect_handle(ConnectHandle onConnect);
+	
+	void register_send_handle(SendHandle onSend);
+
+public:
 	int bind(sock_addr addr);
 	
 	int closesocket();
 
 	int disconnect();
 
-	int async_accpet(int num, AcceptHandle onAccpet, bool bflag);
+	int async_accpet(int num, bool bflag);
 
-	int async_recv(RecvHandle onRecv, bool bflag);
+	int async_accpet(bool bflag);
+
+	int async_recv(bool bflag);
 	
-	int async_connect(sock_addr addr, ConnectHandle onConnect);
+	int async_connect(sock_addr addr);
 
-	int async_send(char * buff, unsigned int lenbuff, SendHandle onSend);
+	int async_send(char * buff, unsigned int lenbuff);
+
+	sock_addr get_remote_addr();
 
 private:
 	socket_base * _socket;
