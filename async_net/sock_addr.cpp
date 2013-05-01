@@ -12,14 +12,14 @@ namespace async_net {
 sock_addr::sock_addr(){
 }
 
-sock_addr::sock_addr(char * _addr, unsigned short _port_) :
+sock_addr::sock_addr(const char * _addr, const unsigned short _port_) :
 	str_addr(_addr), _port(_port_) {	
 #ifdef _WIN32
 	sin_addr.S_un.S_addr = inet_addr(_addr);
 #endif
 }
 
-sock_addr::sock_addr(sockaddr * addr){
+sock_addr::sock_addr(const sockaddr * addr){
 #ifdef _WIN32
 	sin_addr = ((sockaddr_in *)addr)->sin_addr;
 	_port = ((sockaddr_in *)addr)->sin_port;

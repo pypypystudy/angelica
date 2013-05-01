@@ -30,8 +30,8 @@ private:
 
 public:
 	sock_addr();
-	sock_addr(char * _addr, unsigned short _port_);
-	sock_addr(sockaddr * addr);
+	sock_addr(const char * _addr, const unsigned short _port_);
+	sock_addr(const sockaddr * addr);
 	~sock_addr();
 
 	void operator =(const sock_addr & addr);

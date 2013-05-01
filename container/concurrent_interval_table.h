@@ -9,6 +9,8 @@
 
 #include <string>
 #include <map>
+
+#include <boost/function.hpp>
 #include <boost/atomic.hpp>
 #include <boost/pool/pool_alloc.hpp>
 
@@ -53,6 +55,22 @@ public:
 		for(unsigned int i = 0; i < mask; i++){
 			put_map((_map *)_hash_array[i]._hash_bucket.load());
 		}
+	}
+
+	void for_each(boost::function<void(V var) > handle ){
+		shared_lock(_bucket->_rw_flag);
+		for(int i = 0; i < mask; i++){
+			_map * _map_ = _hash_array[i]._hash_bucket.load();
+			if (_map_ != 0){
+				for(_map::iterator iter = _map_->begin(); iter != _map_->end(); iter++){
+					if (shared_lock(iter->second->_rw_flag)){
+						handle(iter->second->value); 
+						unlock_unique(iter->second->_rw_flag);
+					}
+				}
+			}
+		}
+		unlock_shared(_bucket->_rw_flag);
 	}
 
 	bool set(K key, V value){
