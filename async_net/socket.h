@@ -18,6 +18,8 @@ class socket_base_win32;
 
 class socket{
 public:
+	socket();
+
 	socket(async_service & _impl);
 	socket(const socket & _s);
 
@@ -25,8 +27,7 @@ public:
 
 	void operator =(const socket & _s);
 
-private:
-	socket();
+	bool operator ==(const socket & _s);
 
 public:
 	void register_accpet_handle(AcceptHandle onAccpet);
@@ -38,12 +39,18 @@ public:
 	void register_send_handle(SendHandle onSend);
 
 public:
+	int opensocket(async_service & _impl);
+
 	int bind(sock_addr addr);
 	
 	int closesocket();
 
 	int disconnect();
 
+public:
+
+
+public:
 	int async_accpet(int num, bool bflag);
 
 	int async_accpet(bool bflag);

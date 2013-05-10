@@ -142,7 +142,6 @@ public:
 			}
 		}
 		data = _hp_next->_hazard->data;
-		_hp_next->_hazard->~_list_node();
 		_hazard_sys.retire(_hp_begin->_hazard, boost::bind(&angelica::container::msque<T>::put_node, this, _1));
 
 		__list.load()->_size--;
@@ -159,7 +158,7 @@ private:
 		_list * __list = __list_alloc.allocate(1);
 		__list->_size = 0;
 
-		_list_node * _node = __node_alloc.allocate(1);
+		_list_node * _node = get_node();
 		_node->_next.store(0);
 		__list->_begin.store(_node);
 		__list->_end.store(_node);
@@ -178,6 +177,14 @@ private:
 		__list_alloc.deallocate(_p, 1);
 	}
 
+	_list_node * get_node(){
+		_list_node * _node = __node_alloc.allocate(1);
+		new (_node) _list_node();
+		_node->_next = 0;
+		
+		return _node;
+	}
+
 	_list_node * get_node(const T & data){
 		_list_node * _node = __node_alloc.allocate(1);
 		new (_node) _list_node(data);
@@ -187,6 +194,7 @@ private:
 	}
 
 	void put_node(_list_node * _p){
+		_p->~_list_node();
 		__node_alloc.deallocate(_p, 1);
 	}
 

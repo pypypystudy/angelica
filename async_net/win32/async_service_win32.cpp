@@ -23,7 +23,7 @@
 namespace angelica { 
 namespace async_net { 
 
-async_service::async_service() : nConnect(0), nMaxConnect(0) {
+async_service::async_service() : nConnect(0), nMaxConnect(0xffff) {
 	SYSTEM_INFO info;
 	GetSystemInfo(&info);
 		

@@ -21,6 +21,7 @@ namespace angelica {
 namespace async_net {
 	
 namespace detail {
+class SocketPool;
 class write_buff;
 class read_buff;
 } //detail
@@ -58,6 +59,10 @@ public:
 
 	virtual int disconnect() = 0;
 
+public:
+
+
+public:
 	virtual int async_accpet(int num, bool bflag) = 0;
 
 	virtual int async_accpet(bool bflag) = 0;
@@ -93,6 +98,9 @@ protected:
 	int tryconnectcount;
 
 	async_service * _service;
+
+	friend class socket;
+	friend class detail::SocketPool;
 
 };		
 	

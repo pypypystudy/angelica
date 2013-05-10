@@ -31,6 +31,10 @@ public:
 			_socket = new win32::socket_base_win32(_impl);
 #endif //_WIN32
 		}
+		_socket->isclosed = false;
+		_socket->isrecv = false;
+		_socket->isaccept = false;
+		_socket->isdisconnect = true;
 		return _socket;
 	}
 

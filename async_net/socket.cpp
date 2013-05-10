@@ -15,7 +15,8 @@ namespace angelica {
 namespace async_net {
 
 socket::socket(){
-	_ref = new boost::atomic_uint(1);
+	_ref = 0;
+	_socket = 0;
 }
 
 socket::socket(async_service & _impl){
@@ -39,14 +40,32 @@ socket::~socket(){
 void socket::operator =(const socket & _s){
 	_s._ref->operator++();
 	_socket = _s._socket;
-	_ref->operator--();
+	if (_ref != 0){
+		_ref->operator--();
+	}
 	_ref = _s._ref;
+}
+
+bool socket::operator ==(const socket & _s){
+	return (_socket == _s._socket);
 }
 
 int socket::bind(sock_addr addr){
 	return _socket->bind(addr);
 }
-	
+
+int socket::opensocket(async_service & _impl){
+	if (_socket == 0 && _ref == 0){
+		_socket = async_net::detail::SocketPool::get(_impl);
+		_ref = new boost::atomic_uint(1);
+	}else{
+		if (_socket->isclosed == true)
+			_socket->isclosed = false;
+	}
+
+	return socket_succeed;
+}
+
 int socket::closesocket(){
 	return _socket->closesocket();
 }
@@ -67,12 +86,12 @@ int socket::async_recv(bool bflag){
 	return _socket->async_recv(bflag);
 }
 	
-int socket::async_connect(sock_addr addr, ConnectHandle onConnect){
-	return _socket->async_connect(addr, onConnect);
+int socket::async_connect(sock_addr addr){
+	return _socket->async_connect(addr);
 }
 
-int socket::async_send(char * buff, unsigned int lenbuff, SendHandle onSend){
-	return _socket->async_send(buff, lenbuff, onSend);
+int socket::async_send(char * buff, unsigned int lenbuff){
+	return _socket->async_send(buff, lenbuff);
 }
 
 sock_addr socket::get_remote_addr(){

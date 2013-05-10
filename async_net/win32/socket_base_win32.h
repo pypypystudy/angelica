@@ -37,6 +37,7 @@ public:
 
 	int disconnect();
 
+public:
 	int async_accpet(int num, bool bflag);
 
 	int async_accpet(bool bflag);
