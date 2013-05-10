@@ -99,6 +99,7 @@ public:
 
 			if (_ptr_next->_hazard->prev.compare_exchange_strong(_ptr->_hazard,  _list->detail)){
 				_list->detail->next.store(_ptr_next->_hazard);
+				data = _ptr->_hazard->data;
 				_list->size--;
 				break;
 			}
