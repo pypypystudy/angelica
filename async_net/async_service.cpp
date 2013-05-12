@@ -23,16 +23,20 @@ bool async_service::do_one(){
 	return false;
 }
 
-void async_service::start(unsigned int nCurrentNum) {
-	if (nCurrentNum == 0){
-		nCurrentNum = current_num;
-	}
+void async_service::run(){
+	thread_count++;
 
-	for (unsigned int i = 0; i < nCurrentNum; i++) {
-		if (_th_group.create_thread(boost::bind(&async_service::serverwork, this)) == 0){
-			BOOST_THROW_EXCEPTION(std::logic_error("Error: CreateThread failed. "));
+	try{
+		while(1){
+			while(do_one());
+
+			network();
 		}
+	}catch(...){
+		//error log	
 	}
+	
+	thread_count--;
 }
 
 } //async_net

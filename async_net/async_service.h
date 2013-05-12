@@ -7,7 +7,6 @@
 #ifndef _NET_SERVICE_H
 #define _NET_SERVICE_H
 
-#include <boost/thread.hpp>
 #include <boost/function.hpp>
 
 #include <angelica/container/swapque.h>
@@ -28,13 +27,13 @@ public:
 	async_service();
 	~async_service();
 
-	void start(unsigned int nCurrentNum = 0);
-	void stop();
+	void run();
 
 	void post(fnHandle fn);
 
 private:
-	void serverwork();
+	bool network();
+
 	bool do_one();
 
 private:
@@ -43,9 +42,6 @@ private:
 	friend class win32::socket_base_win32;
 #endif //_WIN32
 
-	unsigned int current_num;
-
-	boost::thread_group _th_group;
 	boost::atomic_uint32_t thread_count;
 	
 	boost::atomic_ulong nConnect;
@@ -53,7 +49,7 @@ private:
 
 	angelica::container::swapque<fnHandle > event_que;
 
-}; 
+};  
 
 } //async_net
 } //angelica

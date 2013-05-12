@@ -50,6 +50,10 @@ bool socket::operator ==(const socket & _s){
 	return (_socket == _s._socket);
 }
 
+bool socket::operator !=(const socket & _s){
+	return (_socket != _s._socket);
+}
+
 int socket::bind(sock_addr addr){
 	return _socket->bind(addr);
 }

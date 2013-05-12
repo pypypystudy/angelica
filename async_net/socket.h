@@ -29,6 +29,8 @@ public:
 
 	bool operator ==(const socket & _s);
 
+	bool operator !=(const socket & _s);
+
 public:
 	void register_accpet_handle(AcceptHandle onAccpet);
 

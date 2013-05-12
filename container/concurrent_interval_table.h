@@ -58,9 +58,9 @@ public:
 	}
 
 	void for_each(boost::function<void(V var) > handle ){
-		shared_lock(_bucket->_rw_flag);
 		for(int i = 0; i < mask; i++){
-			_map * _map_ = _hash_array[i]._hash_bucket.load();
+			shared_lock(_hash_array[i]._rw_flag);
+			_map * _map_ = (_map *)_hash_array[i]._hash_bucket.load();
 			if (_map_ != 0){
 				for(_map::iterator iter = _map_->begin(); iter != _map_->end(); iter++){
 					if (shared_lock(iter->second->_rw_flag)){
@@ -69,8 +69,8 @@ public:
 					}
 				}
 			}
+			unlock_shared(_hash_array[i]._rw_flag);
 		}
-		unlock_shared(_bucket->_rw_flag);
 	}
 
 	bool set(K key, V value){
@@ -368,7 +368,7 @@ private:
 		unsigned int hash = 5831;
 		unsigned int slen = strlen(skey);
 		for(unsigned int i = 0; i < slen; i++){
-			hash += hash<<5 + hash + *skey++;
+			hash += (hash<<5) + hash + *skey++;
 		}
 
 		return hash%mod;
@@ -377,7 +377,7 @@ private:
 	unsigned int hash(std::string & strkey, unsigned int mod){
 		unsigned int hash = 5831;
 		for(unsigned int i = 0; i < strkey.size(); i++){
-			hash += hash<<5 + hash + (unsigned int)strkey.at(i);
+			hash += (hash<<5) + hash + (unsigned int)strkey.at(i);
 		}
 
 		return hash%mod;
@@ -387,7 +387,7 @@ private:
 		unsigned int hash = 5831;
 		unsigned int slen = wcslen(wskey);
 		for(unsigned int i = 0; i < slen; i++){
-			hash += hash<<5 + hash + (unsigned int)*wskey++;
+			hash += (hash<<5) + hash + (unsigned int)*wskey++;
 		}
 
 		return hash%mod;
@@ -396,7 +396,7 @@ private:
 	unsigned int hash(std::wstring & wstrkey, unsigned int mod){
 		unsigned int hash = 5831;
 		for(unsigned int i = 0; i < wstrkey.size(); i++){
-			hash += hash<<5 + hash + (unsigned int)wstrkey.at(i);
+			hash += (hash<<5) + hash + (unsigned int)wstrkey.at(i);
 		}
 
 		return hash%mod;
@@ -432,10 +432,10 @@ private:
 		return key%mod;
 	}
 
-	template <typename KEY>
-	unsigned int hash(KEY key, int mod){
-		return key.hash()%mod;
-	}
+	//template <typename KEY>
+	//unsigned int hash(KEY key, int mod){
+	//	return key.hash()%mod;
+	//}
 	
 	node * get_node(){
 		node * _node = _node_alloc.allocate(1);

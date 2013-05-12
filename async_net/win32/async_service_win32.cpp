@@ -24,11 +24,6 @@ namespace angelica {
 namespace async_net { 
 
 async_service::async_service() : nConnect(0), nMaxConnect(0xffff) {
-	SYSTEM_INFO info;
-	GetSystemInfo(&info);
-		
-	current_num = info.dwNumberOfProcessors;
-
 	WSADATA data;
 	WSAStartup(MAKEWORD(2,2), &data);
 
@@ -52,60 +47,54 @@ async_service::~async_service(){
 	WSACleanup();
 }
 
-void async_service::stop(){
-	for(unsigned int i = 0; i < current_num; i++) {
-		win32::OverlappedEX * olp = win32::detail::OverlappedEXPool<win32::OverlappedEX >::get();
-		olp->type = win32_stop_;
-		PostQueuedCompletionStatus(this->hIOCP, 0, 0, &olp->overlap);
+//void async_service::stop(){
+//	for(unsigned int i = 0; i < current_num; i++) {
+//		win32::OverlappedEX * olp = win32::detail::OverlappedEXPool<win32::OverlappedEX >::get();
+//		olp->type = win32_stop_;
+//		PostQueuedCompletionStatus(this->hIOCP, 0, 0, &olp->overlap);
+//	}
+//
+//	_th_group.join_all();
+//}
+
+bool async_service::network() {
+	DWORD nBytesTransferred = 0;
+	socket_base * pHandle = 0;
+	LPOVERLAPPED pOverlapped = 0;
+	_error_code err = 0;
+
+	BOOL bret = GetQueuedCompletionStatus(hIOCP, &nBytesTransferred, (PULONG_PTR)&pHandle, &pOverlapped, INFINITE);
+	if(!bret) {
+		err = GetLastError();
 	}
-
-	_th_group.join_all();
-}
-
-void async_service::serverwork() {
-	thread_count++;
-
-	while(1) {
-		while(do_one());
-
-		DWORD nBytesTransferred = 0;
-		socket_base * pHandle = 0;
-		LPOVERLAPPED pOverlapped = 0;
-		_error_code err = 0;
-
-		BOOL bret = GetQueuedCompletionStatus(hIOCP, &nBytesTransferred, (PULONG_PTR)&pHandle, &pOverlapped, INFINITE);
-		if(!bret) {
-			err = GetLastError();
-		}
 			
-		win32::OverlappedEX * pOverlappedEX = container_of(pOverlapped, win32::OverlappedEX, overlap);
-		if (pOverlappedEX->type == win32_tcp_send_complete){
-			((win32::socket_base_win32*)pHandle)->OnSend(err);
-			win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
-		}else if (pOverlappedEX->type == win32_tcp_recv_complete){
-			((win32::socket_base_win32*)pHandle)->OnRecv(nBytesTransferred, err);
-			win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
-		}else if (pOverlappedEX->type == win32_tcp_connect_complete){
-			((win32::socket_base_win32*)pHandle)->OnConnect(err);
-			win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
-		}else if (pOverlappedEX->type == win32_tcp_disconnect_complete){
-			((win32::socket_base_win32*)pHandle)->onDeconnect(err);
-			win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
-		}else if (pOverlappedEX->type == win32_tcp_accept_complete){
-			win32::OverlappedEX_Accept * _OverlappedEXAccept = container_of(pOverlappedEX, win32::OverlappedEX_Accept, overlapex);
-			((win32::socket_base_win32*)pHandle)->OnAccept(_OverlappedEXAccept->socket_, nBytesTransferred, err);
-			win32::detail::OverlappedEXPool<win32::OverlappedEX_Accept >::release(_OverlappedEXAccept);
-		}else if (pOverlappedEX->type == win32_tcp_close_complete){
-			win32::OverlappedEX_close * _OverlappedEXClose = container_of(pOverlappedEX, win32::OverlappedEX_close, overlapex);
-			((win32::socket_base_win32*)pHandle)->onClose();
-			win32::detail::OverlappedEXPool<win32::OverlappedEX_close >::release(_OverlappedEXClose);
-		}else if (pOverlappedEX->type == win32_stop_){
-			win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
-			break;
-		}
+	win32::OverlappedEX * pOverlappedEX = container_of(pOverlapped, win32::OverlappedEX, overlap);
+	if (pOverlappedEX->type == win32_tcp_send_complete){
+		((win32::socket_base_win32*)pHandle)->OnSend(err);
+		win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
+	}else if (pOverlappedEX->type == win32_tcp_recv_complete){
+		((win32::socket_base_win32*)pHandle)->OnRecv(nBytesTransferred, err);
+		win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
+	}else if (pOverlappedEX->type == win32_tcp_connect_complete){
+		((win32::socket_base_win32*)pHandle)->OnConnect(err);
+		win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
+	}else if (pOverlappedEX->type == win32_tcp_disconnect_complete){
+		((win32::socket_base_win32*)pHandle)->onDeconnect(err);
+		win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
+	}else if (pOverlappedEX->type == win32_tcp_accept_complete){
+		win32::OverlappedEX_Accept * _OverlappedEXAccept = container_of(pOverlappedEX, win32::OverlappedEX_Accept, overlapex);
+		((win32::socket_base_win32*)pHandle)->OnAccept(_OverlappedEXAccept->socket_, nBytesTransferred, err);
+		win32::detail::OverlappedEXPool<win32::OverlappedEX_Accept >::release(_OverlappedEXAccept);
+	}else if (pOverlappedEX->type == win32_tcp_close_complete){
+		win32::OverlappedEX_close * _OverlappedEXClose = container_of(pOverlappedEX, win32::OverlappedEX_close, overlapex);
+		((win32::socket_base_win32*)pHandle)->onClose();
+		win32::detail::OverlappedEXPool<win32::OverlappedEX_close >::release(_OverlappedEXClose);
+	}else if (pOverlappedEX->type == win32_stop_){
+		win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
+		return false;
 	}
-	
-	thread_count--;
+
+	return true;
 }
 
 } //async_net
