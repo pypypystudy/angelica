@@ -27,11 +27,9 @@ void async_service::run(){
 	thread_count++;
 
 	try{
-		while(1){
-			while(do_one());
+		while(do_one());
 
-			network();
-		}
+		network();
 	}catch(...){
 		//error log	
 	}
