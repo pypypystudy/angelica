@@ -71,8 +71,8 @@ public:
 				continue;
 			}
 
-			if (_ptr_next->_hazard->prev.compare_exchange_weak(_ptr_head->_hazard, _new)){
-				_ptr_head->_hazard->next.store(_new);
+			if (_list->head.compare_exchange_weak(_ptr_head->_hazard, _new)){
+				_ptr_next->_hazard->prev.store(_new);
 				_list->size++;
 				break;
 			}
@@ -82,7 +82,7 @@ public:
 		_hsys.release(_ptr_prev);
 	}
 
-	bool pup_front(T & data){
+	bool pop_front(T & data){
 		bool ret = true;
 		
 		detail::_hazard_ptr<node> _ptr_head = _hsys.acquire();
@@ -102,9 +102,9 @@ public:
 		
 			if (_list->head.compare_exchange_weak(_ptr_head->_hazard, _ptr_next->_hazard)){
 				_ptr_next->_hazard->prev.store(0);
-				data = _ptr->_hazard->data;
+				data = _ptr_next->_hazard->data;
 
-				_hsys.retire(_ptr_detail->_hazard, boost::bind(&optimistic_queue::put_node, this, _1));
+				_hsys.retire(_ptr_head->_hazard, boost::bind(&optimistic_queue::put_node, this, _1));
 				_list->size--;
 				
 				break;
@@ -137,7 +137,7 @@ public:
 
 			node * endnode = 0;
 			if (_ptr_detail->_hazard->next.compare_exchange_weak(endnode, _new)){
-				_list->detail.store(_new);
+				_list->detail.compare_exchange_weak(_ptr_detail, _new);
 				_list->size++;
 				break;
 			}
