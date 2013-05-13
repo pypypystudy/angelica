@@ -19,8 +19,8 @@ template<class T, class _Ax = boost::pool_allocator<T> >
 class optimistic_queue{
 private:
 	struct node{
-		node() : next(0), prev(0){}
-		node(T & _data) : data(_data), next(0), prev(0){}
+		node(){}
+		node(T & _data) : data(_data){}
 		~node(){}
 
 		T data;
@@ -28,7 +28,6 @@ private:
 	};
 
 	struct list{
-		boost::atomic<node *> head;
 		boost::atomic<node *> detail;
 		boost::atomic_uint32_t size;
 	};
@@ -58,21 +57,21 @@ public:
 	void push_front(const T & data){
 		node * _new = get_node(data);
 
-		detail::_hazard_ptr<node> _ptr_head = _hsys.acquire();
-		detail::_hazard_ptr<node> _ptr_next = _hsys.acquire();
+		detail::_hazard_ptr<node> _ptr_detail = _hsys.acquire();
+		detail::_hazard_ptr<node> _ptr_prev = _hsys.acquire();
 		while(1){
-			_ptr_head->_hazard = _list->head.load();
-			_ptr_next->_hazard = _ptr_head->_hazard->next.load();
+			_ptr_detail->_hazard = _list->detail.load();
+			_ptr_prev->_hazard = _ptr_detail->_hazard->prev.load();
 
-			_new->next = _ptr_next->_hazard;
-			_new->prev = _ptr_head->_hazard;
+			_new->next = _ptr_detail->_hazard;
+			_new->prev = _ptr_prev->_hazard;
 
-			if (_ptr_head->_hazard != _list->head.load()){
+			if (_ptr_detail->_hazard != _list->detail.load()){
 				continue;
 			}
 
-			if (_ptr_next->_hazard->prev.compare_exchange_weak(_ptr_head->_hazard, _new)){
-				_ptr_head->_hazard->next.store(_new);
+			if (_ptr_prev->_hazard->next.compare_exchange_weak(_ptr_detail->_hazard, _new)){
+				_ptr_detail->_hazard->prev.store(_new);
 				_list->size++;
 				break;
 			}
@@ -85,33 +84,39 @@ public:
 	bool pup_front(T & data){
 		bool ret = true;
 		
-		detail::_hazard_ptr<node> _ptr_head = _hsys.acquire();
+		detail::_hazard_ptr<node> _ptr_detail = _hsys.acquire();
+		detail::_hazard_ptr<node> _ptr_prev = _hsys.acquire();
 		detail::_hazard_ptr<node> _ptr_next = _hsys.acquire();
 		while(1){
-			_ptr_head->_hazard = _list->head.load();
-			_ptr_next->_hazard = _ptr_head->_hazard->next.load();
+			_ptr_detail->_hazard = _list->detail.load();
+			_ptr_prev->_hazard = _ptr_detail->_hazard->prev.load();
+			_ptr_next->_hazard = _ptr_detail->_hazard->next.load();
 
-			if (_ptr_next->_hazard == 0){
+			if (_ptr_detail->_hazard != _list->detail.load()){
+				continue;
+			}
+
+			if (_ptr_detail->_hazard == _ptr_next->_hazard){
 				ret = false;
 				break;
 			}
 
-			if (_ptr_head->_hazard != _list->head.load()){
+			if (_ptr_detail->_hazard != _list->detail.load()){
 				continue;
 			}
 		
-			if (_list->head.compare_exchange_weak(_ptr_head->_hazard, _ptr_next->_hazard)){
-				_ptr_next->_hazard->prev.store(0);
+			if (_ptr_prev->_hazard->next.compare_exchange_weak(_ptr_detail->_hazard, _ptr_next->_hazard)){
+				_ptr_next->_hazard->prev.store(_ptr_prev->_hazard);
 				data = _ptr->_hazard->data;
-
+				_list.detail.compare_exchange_weak(_ptr_detail->_hazard, _ptr_prev->_hazard);
 				_hsys.retire(_ptr_detail->_hazard, boost::bind(&optimistic_queue::put_node, this, _1));
 				_list->size--;
-				
 				break;
 			}
 		}
 
-		_hsys.release(_ptr_head);
+		_hsys.release(_ptr_detail);
+		_hsys.release(_ptr_prev);
 		_hsys.release(_ptr_next);
 
 		return ret;
@@ -119,28 +124,12 @@ public:
 
 	void push_back(const T & data){
 		node * _new = get_node(data);
+		_new->next.store(_list->detail);
 
 		detail::_hazard_ptr<node> _ptr_detail = _hsys.acquire();
+		detail::_hazard_ptr<node> _ptr_next = _hsys.acquire();
 		while(1){
-			_ptr_detail->_hazard = _list->detail.load();
-
-			if(_ptr_detail->_hazard->next != 0){
-				_list->detail.store(_ptr_detail->_hazard->next);
-				continue;
-			}
-
-			_new->prev = _ptr_detail->_hazard;
-
-			if (_ptr_detail->_hazard != _list->detail.load()){
-				continue;
-			}
-
-			node * endnode = 0;
-			if (_ptr_detail->_hazard->next.compare_exchange_weak(endnode, _new)){
-				_list->detail.store(_new);
-				_list->size++;
-				break;
-			}
+			_ptr->_hazard = _list->detail.load();
 		}
 	}
 
@@ -149,20 +138,17 @@ public:
 		
 		detail::_hazard_ptr<node> _ptr_detail = _hsys.acquire();
 		detail::_hazard_ptr<node> _ptr_prev = _hsys.acquire();
+		detail::_hazard_ptr<node> _ptr_next = _hsys.acquire();
 		while(1){
 			_ptr_detail->_hazard = _list->detail.load();
 			_ptr_prev->_hazard = _ptr_detail->_hazard->prev.load();
-			
-			if(_ptr_detail->_hazard->next != 0){
-				_list->detail.store(_ptr_detail->_hazard->next);
-				continue;
-			}
+			_ptr_next->_hazard = _ptr_detail->_hazard->next.load();
 
 			if (_ptr_detail->_hazard != _list->detail.load()){
 				continue;
 			}
 
-			if (_ptr_prev->_hazard == _list->head.load()){
+			if (_ptr_detail->_hazard == _ptr_next->_hazard){
 				ret = false;
 				break;
 			}
@@ -171,20 +157,19 @@ public:
 				continue;
 			}
 		
-			if (_ptr_prev->_hazard->next.compare_exchange_weak(_ptr_detail->_hazard, 0)){
+			if (_ptr_prev->_hazard->next.compare_exchange_weak(_ptr_detail->_hazard, _ptr_next->_hazard)){
+				_ptr_next->_hazard->prev.store(_ptr_prev->_hazard);
 				data = _ptr->_hazard->data;
-				
-				_list.detail.compare_exchange_weak(_ptr_detail->_hazard, _ptr_prev->_hazard);
-				
+				_list.detail.compare_exchange_weak(_ptr_detail->_hazard, _ptr_next->_hazard);
 				_hsys.retire(_ptr_detail->_hazard, boost::bind(&optimistic_queue::put_node, this, _1));
 				_list->size--;
-				
 				break;
 			}
 		}
 
 		_hsys.release(_ptr_detail);
 		_hsys.release(_ptr_prev);
+		_hsys.release(_ptr_next);
 
 		return ret;
 	}
@@ -217,18 +202,18 @@ private:
 
 		node * _node = get_node();
 		_list->detail = _node;
-		_list->head = _node;
+		_list->detail->next.store(_node);
+		_list->detail->prev.store(_node);
 
 		return _list;
 	}
 
 	void put_list(list * _list){
-		node * _next = _list->detail.load();
+		node * _next = 0;
 		do{
-			node * _tmpnext = _next;
-			_next = _tmpnext->next.load();
-			put_node(_tmpnext);
-		}while(_next != 0);
+			node * _next = _list->detail->next;
+			put_node(_next);
+		}while(_next != _list->detail);
 	}
 
 private:
