@@ -17,7 +17,11 @@
 namespace angelica { 
 namespace async_net { 
 namespace win32 { 
+#ifdef _WIN32
 class socket_base_win32;
+#elif __linux__ 
+class socket_base_linux;
+#endif
 }// win32
 
 typedef boost::function<void()> fnHandle;

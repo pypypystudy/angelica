@@ -109,6 +109,9 @@ public:
 	}
 
 private:
+	//Recover flag
+	boost::atomic_flag recoverflag;
+
 	// deallocate function
 	typedef boost::function<void(typename T * )> fn_dealloc;
 	// deallocate struct data
@@ -136,13 +139,17 @@ public:
 				}
 			}
 
-			if (_rvector_ptr != 0)
+			if (_rvector_ptr != 0){
 				break;
+			}else{
+				boost::this_thread::yield();
+			}
 		}
 
 		// push into rvector
 		_rvector_ptr->re_vector.push_back(std::make_pair(p, fn));
 	
+
 		// scan
 		if(_rvector_ptr->re_vector.size() > 32 && _rvector_ptr->re_vector.size() > llen.load()){
 			// scan hazard pointers list collecting all non-null ptrs
@@ -175,7 +182,7 @@ public:
 				}
 			}
 		}
-
+		
 		_rvector_ptr->active.store(1);
 	}
 

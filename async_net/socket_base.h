@@ -60,9 +60,6 @@ public:
 	virtual int disconnect() = 0;
 
 public:
-
-
-public:
 	virtual int async_accpet(int num, bool bflag) = 0;
 
 	virtual int async_accpet(bool bflag) = 0;
