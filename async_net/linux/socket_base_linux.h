@@ -2,22 +2,25 @@
  * socket_base_linux.h
  * Created on: 2013-5-19
  *	   Author: qianqians
- * socket_base_linux ½Ó¿Ú
+ * socket_base_linux ï¿½Ó¿ï¿½
  */
 #ifdef __linux__
 #ifndef _SOCKET_BASE_LINUX_H
 #define _SOCKET_BASE_LINUX_H
 
 #include <sys/epoll.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include <boost/thread.hpp>
+#include <boost/atomic.hpp>
 
 #include "../async_service.h"
 #include "../socket_base.h"
 
 namespace angelica{
 namespace async_net{
-namespace linux{
+namespace _linux{
 
 class socket_base_linux : public socket_base{
 public:
@@ -25,43 +28,55 @@ public:
 	~socket_base_linux();
 
 private:
-	socket_base_linux(){};
-	socket_base_linux(const socket_base_linux & s){};
-	void operator =(const socket_base_linux & s){};
+	void InitSocket(int fd);
+
+private:
+	socket_base_linux(int fd);
+
+	socket_base_linux(){}
+	socket_base_linux(const socket_base_linux & s){}
+	void operator =(const socket_base_linux & s){}
 
 public:
-	void register_accpet_handle(AcceptHandle onAccpet);
+	int bind(sock_addr addr);
 
-	void register_recv_handle(RecvHandle onRecv);
-	
-	void register_connect_handle(ConnectHandle onConnect);
-	
-	void register_send_handle(SendHandle onSend);
+	int opensocket(sock_addr addr);
+
+	int closesocket();
 
 public:
-	virtual int bind(sock_addr addr) = 0;
+	int async_accpet(int num, bool bflag);
+
+	int async_accpet(bool bflag);
+
+	int async_recv(bool bflag);
 	
-	virtual int closesocket() = 0;
+	int async_connect(const sock_addr & addr);
 
-	virtual int disconnect() = 0;
-
-public:
-	virtual int async_accpet(int num, bool bflag) = 0;
-
-	virtual int async_accpet(bool bflag) = 0;
-
-	virtual int async_recv(bool bflag) = 0;
-	
-	virtual int async_connect(sock_addr addr) = 0;
-
-	virtual int async_send(char * buff, unsigned int lenbuff) = 0;
+	int async_send(char * buff, unsigned int lenbuff);
 
 	sock_addr get_remote_addr(){return _remote_addr;}
 
-private:
-	boost::thread th;
+public:
+	void OnAccept(int fd);
 
-	SOCKET s;
+	void OnConnect(int err);
+
+	void OnSend();
+
+	void OnRecv();
+
+private:
+	int do_send();
+
+private:
+	boost::thread * _th;
+
+	boost::atomic_flag _sendflag;
+
+	boost::shared_mutex _send_shared_mutex;
+
+	int _socket;
 
 };
 

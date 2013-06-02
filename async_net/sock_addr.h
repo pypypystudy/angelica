@@ -26,6 +26,8 @@ private:
 
 #ifdef _WIN32
 	struct in_addr sin_addr;
+#elif __linux__
+	struct in_addr sin_addr;
 #endif
 
 public:

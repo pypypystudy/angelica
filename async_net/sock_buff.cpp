@@ -81,6 +81,7 @@ void write_buff::buffex::clear() {
 #endif	//_WIN32
 }
 
+#ifdef _WIN32
 void write_buff::buffex::put_buff() {
 	boost::upgrade_lock<boost::shared_mutex> lock(_wsabuf_mu);
 
@@ -102,6 +103,7 @@ void write_buff::buffex::put_buff() {
 	_wsabuf[nSlide].buf = buff;
 	_wsabuf[nSlide].len = slide.load();
 }
+#endif //_WIN32
 
 //write buff
 write_buff::write_buff(){
@@ -121,6 +123,7 @@ void write_buff::init(){
 	_send_flag.clear();
 }
 
+#ifdef _WIN32
 void write_buff::write(char * data, std::size_t llen){
 	buffex * _write_buff = 0;
 	while(1){
@@ -178,6 +181,34 @@ void write_buff::write(char * data, std::size_t llen){
 
 	_write_buff->_mu.unlock_upgrade();
 }
+#endif //_WIN32
+
+#ifdef __linux__
+void write_buff::write(char * data, std::size_t llen){
+	buffex * _write_buff = 0;
+	while(1){
+		_write_buff = write_buff_.load();
+
+		boost::shared_lock<boost::shared_mutex> lock(_write_buff->_mu);
+		if(!lock.owns_lock()) {
+			continue;
+		}
+
+
+		uint32_t _old_slide = _write_buff->slide.load();
+		uint32_t _new_slide = _old_slide + llen;
+
+		if (_new_slide > _write_buff->buff_size){
+			continue;
+		}else{
+			if (_write_buff->slide.compare_exchange_strong(_old_slide, _new_slide)){
+				memcpy(&_write_buff->buff[_old_slide], data, llen);
+				break;
+			}
+		}
+	}
+}
+#endif //__linux__
 
 bool write_buff::send_buff(){
 	buffex * _buff = write_buff_.load();
@@ -203,7 +234,11 @@ bool write_buff::send_buff(){
 		return false;
 	}
 
+#ifdef _WIN32
 	if (_buff->_wsabuf_slide.load() <= 0 && _buff->slide.load() <= 0){
+#elif __linux__
+	if (_buff->slide.load() <= 0){
+#endif //_WIN32
 		_send_flag.clear();
 		return false;
 	}

@@ -16,7 +16,10 @@ sock_addr::sock_addr(const char * _addr, const unsigned short _port_) :
 	str_addr(_addr), _port(_port_) {	
 #ifdef _WIN32
 	sin_addr.S_un.S_addr = inet_addr(_addr);
+#elif __linux__
+	sin_addr.s_addr = inet_addr(_addr);
 #endif
+
 }
 
 sock_addr::sock_addr(const sockaddr * addr){

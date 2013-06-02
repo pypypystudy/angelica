@@ -13,6 +13,13 @@ void async_service::post(fnHandle fn){
 	event_que.push(fn);
 }
 
+int async_service::Init(){
+	detail::SocketPool::Init();
+	detail::BuffPool::Init(detail::page_size);
+	detail::ReadBuffPool::Init();
+	detail::WriteBuffPool::Init();
+}
+
 bool async_service::do_one(){
 	fnHandle do_fn;
 	if(event_que.pop(do_fn)){

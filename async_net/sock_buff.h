@@ -58,8 +58,6 @@ private:
 
 		void clear();
 
-		void put_buff();
-
 		char * buff;
 		std::size_t buff_size;
 		boost::atomic_uint32_t slide;
@@ -67,10 +65,13 @@ private:
 		boost::shared_mutex _mu;
 		
 #ifdef _WIN32
+		void put_buff();
+
 		WSABUF * _wsabuf;
 		unsigned int _wsabuf_count;
 		boost::atomic_uint32_t _wsabuf_slide;
 		boost::shared_mutex _wsabuf_mu;
+
 #endif	//_WIN32
 	};
 

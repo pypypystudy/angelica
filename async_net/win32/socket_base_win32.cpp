@@ -2,9 +2,11 @@
  * socket_base.cpp
  * Created on: 2012-10-18
  *	   Author: qianqians
- * socket ½Ó¿Ú
+ * socket ï¿½Ó¿ï¿½
  */
 #ifdef _WIN32
+
+#include <angelica/exception/exception.h>
 
 #include "winhdef.h"
 
@@ -30,37 +32,39 @@ SOCKET Getfd(){
 		fd = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0, 0, WSA_FLAG_OVERLAPPED);
 	}
 	
-	int nZeroSend = 0;
-	if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (char *)&nZeroSend, sizeof(nZeroSend)) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
+	if (fd != INVALID_SOCKET){
+		int nZeroSend = 0;
+		if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (char *)&nZeroSend, sizeof(nZeroSend)) == SOCKET_ERROR){
+			DWORD err = WSAGetLastError();
+		}
 
-	int nZeroRecv = 0;
-	if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)&nZeroRecv, sizeof(nZeroRecv)) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
+		int nZeroRecv = 0;
+		if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)&nZeroRecv, sizeof(nZeroRecv)) == SOCKET_ERROR){
+			DWORD err = WSAGetLastError();
+		}
 
-	BOOL bNodelay = true;
-	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&bNodelay, sizeof(BOOL)) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
+		BOOL bNodelay = true;
+		if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&bNodelay, sizeof(BOOL)) == SOCKET_ERROR){
+			DWORD err = WSAGetLastError();
+		}
 
-	unsigned long ul = 1;
-	if (ioctlsocket(fd, FIONBIO, &ul) == SOCKET_ERROR){
-		DWORD err = WSAGetLastError();
-	}
+		unsigned long ul = 1;
+		if (ioctlsocket(fd, FIONBIO, &ul) == SOCKET_ERROR){
+			DWORD err = WSAGetLastError();
+		}
 
-	BOOL bSet = TRUE;
-	if(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char *)&bSet, sizeof(bSet)) == 0){
-		tcp_keepalive alive_in;
-		tcp_keepalive alive_out;
-		unsigned long ulBytesRet;
+		BOOL bSet = TRUE;
+		if(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char *)&bSet, sizeof(bSet)) == 0){
+			tcp_keepalive alive_in;
+			tcp_keepalive alive_out;
+			unsigned long ulBytesRet;
 
-		alive_in.keepaliveinterval = 1000;
-		alive_in.keepalivetime = 500;
-		alive_in.onoff = true;
+			alive_in.keepaliveinterval = 1000;
+			alive_in.keepalivetime = 500;
+			alive_in.onoff = true;
 
-		WSAIoctl(fd, SIO_KEEPALIVE_VALS, &alive_in, sizeof(alive_in), &alive_out, sizeof(alive_out), &ulBytesRet, 0, 0);
+			WSAIoctl(fd, SIO_KEEPALIVE_VALS, &alive_in, sizeof(alive_in), &alive_out, sizeof(alive_out), &ulBytesRet, 0, 0);
+		}
 	}
 
 	return fd;
@@ -74,17 +78,19 @@ void Releasefd(SOCKET fd){
 	}
 }
 
-
-
 socket_base_win32::socket_base_win32(async_service & _impl) : 
 	socket_base(_impl),
 	isListen(false)
 {
 	fd = win32::Getfd();
 
+	if (fd == INVALID_SOCKET){
+		throw angelica::excepiton("INVALID_SOCKET");
+	}
+
 	if (CreateIoCompletionPort((HANDLE)fd, _service->hIOCP, (ULONG_PTR)this, 0) != _service->hIOCP){
 		DWORD err = WSAGetLastError();
-		BOOST_THROW_EXCEPTION(std::logic_error("Error: CreateIoCompletionPort failed."));
+		BOOST_THROW_EXCEPTION(angelica::excepiton("Error: CreateIoCompletionPort failed.", err));
 	}
 }
 
@@ -107,7 +113,18 @@ int socket_base_win32::bind(sock_addr addr){
 	return ret;
 }
 
-int socket_base_win32::do_disconnect(LPOVERLAPPED povld){
+int socket_base_win32::opensocket(){
+	isclosed = false;
+	isrecv = false;
+	isaccept = false;
+	isdisconnect = true;
+}
+
+int socket_base_win32::do_disconnect(){
+	OverlappedEX_close * ovl = detail::OverlappedEXPool<OverlappedEX_close>::get();
+	ovl->fd = fd;
+	ovl->overlapex.type = win32_tcp_close_complete;
+
 	DWORD dwBytes;
 	GUID GuidDisconnectEx = WSAID_DISCONNECTEX;
 	LPFN_DISCONNECTEX fn_DISCONNECTEX;
@@ -123,7 +140,7 @@ int socket_base_win32::do_disconnect(LPOVERLAPPED povld){
 		NULL, 
 		NULL);
 
-	if (!fn_DISCONNECTEX(fd, povld, TF_REUSE_SOCKET, 0)){
+	if (!fn_DISCONNECTEX(fd, &ovl->overlapex.overlap, TF_REUSE_SOCKET, 0)){
 		DWORD err = WSAGetLastError();
 		if (err != ERROR_IO_PENDING){
 			return err;
@@ -135,37 +152,13 @@ int socket_base_win32::do_disconnect(LPOVERLAPPED povld){
 	return socket_succeed;
 }
 
-int socket_base_win32::disconnect(){
-	CancelIo((HANDLE)fd);
-
-	OverlappedEX * ovl = detail::OverlappedEXPool<OverlappedEX >::get();
-	ovl->type = win32_tcp_disconnect_complete;
-	
-	return do_disconnect(&ovl->overlap);
-}
-
-void socket_base_win32::onDeconnect(_error_code err){
-	if (!err){
-		isrecv = false;
-		isaccept = false;
-
-		onAcceptHandle.clear();
-		onRecvHandle.clear();
-		onConnectHandle.clear();
-	}
-}
-
 int socket_base_win32::closesocket(){
 	if (isdisconnect){
 		onClose();
 	}else{
 		CancelIo((HANDLE)fd);
-
-		OverlappedEX_close * ovl = detail::OverlappedEXPool<OverlappedEX_close>::get();
-		ovl->fd = fd;
-		ovl->overlapex.type = win32_tcp_close_complete;
 	
-		return do_disconnect(&ovl->overlapex.overlap);
+		return do_disconnect();
 	}
 
 	return socket_succeed;
@@ -224,8 +217,6 @@ int socket_base_win32::async_accpet(int num, bool bflag){
 					return WSAGetLastError();
 				} 
 			}
-	
-			_error_code ret = socket_succeed;
 
 			SYSTEM_INFO info;
 			GetSystemInfo(&info);
@@ -294,12 +285,12 @@ void socket_base_win32::OnAccept(socket_base * sClient, DWORD llen, _error_code 
 			}
 
 			((socket_base_win32*)sClient)->_remote_addr = remote_addr;
-
 			((socket_base_win32*)sClient)->isdisconnect = false;
 		}
 	}
 
 	socket socket_;
+	socket_._ref = new boost::atomic_uint(1);
 	socket_._socket = sClient;
 	if (!onAcceptHandle.empty()){
 		onAcceptHandle(socket_, ((socket_base_win32*)sClient)->_remote_addr, err);
@@ -369,6 +360,10 @@ void socket_base_win32::OnRecv(DWORD llen, _error_code err) {
 				if(error != WSAEWOULDBLOCK){
 					err = error;
 				}
+				break;
+			}
+
+			if (llen < size){
 				break;
 			}
 

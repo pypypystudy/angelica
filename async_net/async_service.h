@@ -36,6 +36,8 @@ public:
 	void post(fnHandle fn);
 
 private:
+	void Init();
+
 	bool network();
 
 	bool do_one();
@@ -44,6 +46,9 @@ private:
 #ifdef _WIN32
 	HANDLE hIOCP;
 	friend class win32::socket_base_win32;
+#elif __linux__
+	int epollfd_write, epollfd_read;
+	friend class win32::socket_base_linux;
 #endif //_WIN32
 
 	boost::atomic_uint32_t thread_count;

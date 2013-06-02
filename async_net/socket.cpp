@@ -2,7 +2,7 @@
  * socket.cpp
  * Created on: 2012-3-24
  *	   Author: qianqians
- * socket ½Ó¿Ú
+ * socket ï¿½Ó¿ï¿½
  */
 #include "socket.h"
 #include "socket_pool.h"
@@ -63,8 +63,7 @@ int socket::opensocket(async_service & _impl){
 		_socket = async_net::detail::SocketPool::get(_impl);
 		_ref = new boost::atomic_uint(1);
 	}else{
-		if (_socket->isclosed == true)
-			_socket->isclosed = false;
+		return _socket->opensocket();
 	}
 
 	return socket_succeed;
@@ -72,10 +71,6 @@ int socket::opensocket(async_service & _impl){
 
 int socket::closesocket(){
 	return _socket->closesocket();
-}
-
-int socket::disconnect(){
-	return _socket->disconnect();
 }
 
 int socket::async_accpet(int num, bool bflag){

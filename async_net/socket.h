@@ -2,7 +2,7 @@
  * socket.h
  * Created on: 2013-2-24
  *	   Author: qianqians
- * socket ½Ó¿Ú
+ * socket ï¿½Ó¿ï¿½
  */
 #ifndef _SOCKET_H
 #define _SOCKET_H
@@ -41,16 +41,12 @@ public:
 	void register_send_handle(SendHandle onSend);
 
 public:
-	int opensocket(async_service & _impl);
-
 	int bind(sock_addr addr);
-	
-	int closesocket();
-
-	int disconnect();
 
 public:
-
+	int opensocket(async_service & _impl);
+	
+	int closesocket();
 
 public:
 	int async_accpet(int num, bool bflag);

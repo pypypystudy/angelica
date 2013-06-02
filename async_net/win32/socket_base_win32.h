@@ -32,10 +32,10 @@ private:
 
 public:
 	int bind(sock_addr addr);
-	
-	int closesocket();
 
-	int disconnect();
+	int opensocket();
+
+	int closesocket();
 
 public:
 	int async_accpet(int num, bool bflag);

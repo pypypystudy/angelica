@@ -2,13 +2,13 @@
  * async_service_win32.cpp
  *   Created on: 2012-11-14
  *       Author: qianqians
- * async_service win32 й╣ож
+ * async_service win32 й╣О©╫О©╫
  */
 #ifdef _WIN32
 
 #include "winhdef.h"
 
-#include <boost/exception/all.hpp>
+#include <angelica/excepiton/exception.h>
 
 #include "../async_service.h"
 #include "../socket.h"
@@ -29,17 +29,14 @@ async_service::async_service() : nConnect(0), nMaxConnect(0xffff) {
 
 	hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, 0);
 	if(hIOCP == 0) {
-		BOOST_THROW_EXCEPTION(std::logic_error("Error: CreateIoCompletionPort failed."));
+		throw angelica::exception("Error: CreateIoCompletionPort failed.");
 	}
-
-	detail::SocketPool::Init();
-	detail::BuffPool::Init(detail::page_size);
-	detail::ReadBuffPool::Init();
-	detail::WriteBuffPool::Init();
 
 	win32::detail::OverlappedEXPool<win32::OverlappedEX >::Init();
 	win32::detail::OverlappedEXPool<win32::OverlappedEX_close>::Init();
 	win32::detail::OverlappedEXPool<win32::OverlappedEX_Accept >::Init();
+
+	Init();
 }
 
 async_service::~async_service(){

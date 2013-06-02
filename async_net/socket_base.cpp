@@ -2,7 +2,7 @@
  * socket_base.cpp
  * Created on: 2012-10-18
  *	   Author: qianqians
- * socket ½Ó¿Ú
+ * socket ï¿½Ó¿ï¿½
  */
 #include "sock_addr.h"
 
@@ -15,12 +15,12 @@
 namespace angelica {
 namespace async_net {
 
-socket_base::socket_base(async_service & _service_) :
+socket_base::socket_base(async_service * _service_) :
 	isclosed(false),
 	isrecv(false),
 	isaccept(false),
 	isdisconnect(true),
-	_service(&_service_),
+	_service(_service_),
 	_read_buff(detail::ReadBuffPool::get()),
 	_write_buff(detail::WriteBuffPool::get())
 {
