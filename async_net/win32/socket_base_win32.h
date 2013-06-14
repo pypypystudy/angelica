@@ -70,7 +70,7 @@ private:
 
 	int do_async_connect();
 
-	int do_disconnect(LPOVERLAPPED povld);
+	int do_disconnect();
 
 private:
 	SOCKET fd;
