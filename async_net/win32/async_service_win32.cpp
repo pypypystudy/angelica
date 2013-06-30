@@ -8,13 +8,13 @@
 
 #include "winhdef.h"
 
-#include <angelica/excepiton/exception.h>
+#include <angelica/exception/exception.h>
 
 #include "../async_service.h"
 #include "../socket.h"
 #include "../socket_pool.h"
 #include "../buff_pool.h"
-#include "../read_bufff_pool.h"
+#include "../read_buff_pool.h"
 #include "../write_buff_pool.h"
 
 #include "Overlapped.h"
@@ -29,7 +29,7 @@ async_service::async_service() : nConnect(0), nMaxConnect(0xffff) {
 
 	hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, 0);
 	if(hIOCP == 0) {
-		throw angelica::exception("Error: CreateIoCompletionPort failed.");
+		throw angelica::exception::exception("Error: CreateIoCompletionPort failed.");
 	}
 
 	win32::detail::OverlappedEXPool<win32::OverlappedEX >::Init();
@@ -43,16 +43,6 @@ async_service::~async_service(){
 	CloseHandle(hIOCP);
 	WSACleanup();
 }
-
-//void async_service::stop(){
-//	for(unsigned int i = 0; i < current_num; i++) {
-//		win32::OverlappedEX * olp = win32::detail::OverlappedEXPool<win32::OverlappedEX >::get();
-//		olp->type = win32_stop_;
-//		PostQueuedCompletionStatus(this->hIOCP, 0, 0, &olp->overlap);
-//	}
-//
-//	_th_group.join_all();
-//}
 
 bool async_service::network() {
 	DWORD nBytesTransferred = 0;
@@ -75,9 +65,9 @@ bool async_service::network() {
 	}else if (pOverlappedEX->type == win32_tcp_connect_complete){
 		((win32::socket_base_win32*)pHandle)->OnConnect(err);
 		win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
-	}else if (pOverlappedEX->type == win32_tcp_disconnect_complete){
-		((win32::socket_base_win32*)pHandle)->onDeconnect(err);
-		win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
+	//}else if (pOverlappedEX->type == win32_tcp_disconnect_complete){
+	//	((win32::socket_base_win32*)pHandle)->onDeconnect(err);
+	//	win32::detail::OverlappedEXPool<win32::OverlappedEX >::release(pOverlappedEX);
 	}else if (pOverlappedEX->type == win32_tcp_accept_complete){
 		win32::OverlappedEX_Accept * _OverlappedEXAccept = container_of(pOverlappedEX, win32::OverlappedEX_Accept, overlapex);
 		((win32::socket_base_win32*)pHandle)->OnAccept(_OverlappedEXAccept->socket_, nBytesTransferred, err);

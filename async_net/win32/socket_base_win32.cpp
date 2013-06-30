@@ -14,7 +14,7 @@
 #include "../sock_addr.h"
 #include "../sock_buff.h"
 #include "../socket_pool.h"
-#include "../read_bufff_pool.h"
+#include "../read_buff_pool.h"
 #include "../write_buff_pool.h"
 #include "../buff_pool.h"
 #include "socket_base_win32.h"
@@ -85,12 +85,12 @@ socket_base_win32::socket_base_win32(async_service & _impl) :
 	fd = win32::Getfd();
 
 	if (fd == INVALID_SOCKET){
-		throw angelica::excepiton("INVALID_SOCKET");
+		throw angelica::exception::exception("INVALID_SOCKET");
 	}
 
 	if (CreateIoCompletionPort((HANDLE)fd, _service->hIOCP, (ULONG_PTR)this, 0) != _service->hIOCP){
 		DWORD err = WSAGetLastError();
-		BOOST_THROW_EXCEPTION(angelica::excepiton("Error: CreateIoCompletionPort failed.", err));
+		BOOST_THROW_EXCEPTION(angelica::exception::exception("Error: CreateIoCompletionPort failed.", err));
 	}
 }
 
@@ -118,6 +118,8 @@ int socket_base_win32::opensocket(){
 	isrecv = false;
 	isaccept = false;
 	isdisconnect = true;
+
+	return socket_succeed;
 }
 
 int socket_base_win32::do_disconnect(){
@@ -459,7 +461,7 @@ void socket_base_win32::OnSend(_error_code err){
 	}
 }	
 
-int socket_base_win32::async_connect(sock_addr addr){
+int socket_base_win32::async_connect(const sock_addr &  addr){
 	if(isclosed){
 		return is_closed;
 	}else if(!isdisconnect){

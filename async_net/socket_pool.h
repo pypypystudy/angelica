@@ -1,5 +1,5 @@
 /*
- * socke_poolt.h
+ * socket_pool.h
  * Created on: 2013-2-24
  *	   Author: qianqians
  * socket ½Ó¿Ú

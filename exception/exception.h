@@ -17,13 +17,25 @@ namespace exception{
 
 class exception : public std::exception{
 public:
-	exception(std::string & info){
+	exception(const char * info){
 		std::stringstream strstream;
 		strstream << info << " file:" << __FILE__ << " line:" << __LINE__;
 		err = strstream.str();
 	}
 
-	exception(std::string & info, int errcode){
+	exception(const std::string & info){
+		std::stringstream strstream;
+		strstream << info << " file:" << __FILE__ << " line:" << __LINE__;
+		err = strstream.str();
+	}
+
+	exception(const char * info, int errcode){
+		std::stringstream strstream;
+		strstream << info << errcode << " file:" << __FILE__ << " line:" << __LINE__;
+		err = strstream.str();
+	}
+
+	exception(const std::string & info, int errcode){
 		std::stringstream strstream;
 		strstream << info << errcode << " file:" << __FILE__ << " line:" << __LINE__;
 		err = strstream.str();

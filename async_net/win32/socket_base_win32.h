@@ -44,7 +44,7 @@ public:
 	
 	int async_recv(bool bflag);
 	
-	int async_connect(sock_addr addr);
+	int async_connect(const sock_addr & addr);
 
 	int async_send(char * buff, unsigned int lenbuff);
 

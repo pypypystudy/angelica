@@ -12,13 +12,15 @@
 #ifndef _NO_BLOCKING_POOL_H
 #define _NO_BLOCKING_POOL_H
 
+#ifdef _WIN32
+#include <Windows.h>
+#elif __linux__ 
+//
+#endif
+
 #include <list>
 #include <boost/thread/mutex.hpp>
 #include <boost/atomic.hpp>
-
-#ifdef _WIN32
-#include <Windows.h>
-#endif
 
 namespace angelica {
 namespace container {

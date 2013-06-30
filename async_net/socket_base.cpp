@@ -9,18 +9,18 @@
 #include "sock_buff.h"
 #include "socket.h"
 #include "socket_base.h"
-#include "read_bufff_pool.h"
+#include "read_buff_pool.h"
 #include "write_buff_pool.h"
 
 namespace angelica {
 namespace async_net {
 
-socket_base::socket_base(async_service * _service_) :
+socket_base::socket_base(async_service & _service_) :
 	isclosed(false),
 	isrecv(false),
 	isaccept(false),
 	isdisconnect(true),
-	_service(_service_),
+	_service(&_service_),
 	_read_buff(detail::ReadBuffPool::get()),
 	_write_buff(detail::WriteBuffPool::get())
 {

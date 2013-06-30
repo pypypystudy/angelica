@@ -97,5 +97,22 @@ sock_addr socket::get_remote_addr(){
 	return _socket->get_remote_addr();
 }
 
+void socket::register_accpet_handle(AcceptHandle onAccpet){
+	_socket->register_accpet_handle(onAccpet);
+}
+
+void socket::register_recv_handle(RecvHandle onRecv){
+	_socket->register_recv_handle(onRecv);
+}
+	
+void socket::register_connect_handle(ConnectHandle onConnect){
+	_socket->register_connect_handle(onConnect);
+}
+	
+void socket::register_send_handle(SendHandle onSend){
+	_socket->register_send_handle(onSend);
+}
+
+
 } //async_net
 } //angelica

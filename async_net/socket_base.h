@@ -35,7 +35,7 @@ typedef boost::function<void(_error_code err) > SendHandle;
 
 class socket_base {
 public:
-	socket_base(async_service * _impl);
+	socket_base(async_service & _impl);
 	~socket_base();
 
 private:

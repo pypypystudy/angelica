@@ -5,6 +5,10 @@
  * async_service
  */
 #include "async_service.h"
+#include "socket_pool.h"
+#include "buff_pool.h"
+#include "read_buff_pool.h"
+#include "write_buff_pool.h"
 
 namespace angelica { 
 namespace async_net { 
@@ -13,7 +17,7 @@ void async_service::post(fnHandle fn){
 	event_que.push(fn);
 }
 
-int async_service::Init(){
+void async_service::Init(){
 	detail::SocketPool::Init();
 	detail::BuffPool::Init(detail::page_size);
 	detail::ReadBuffPool::Init();

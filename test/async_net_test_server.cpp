@@ -30,7 +30,10 @@ class Session
 {
 public:
 	Session(const Socket & _s) : s(_s), _buff(new char[sizeof(msg)]), buff_llen(0) {
-		s.async_recv(boost::bind(&Session::onRecv, this, _1, _2, _3), true);
+		s.register_recv_handle(boost::bind(&Session::onRecv, this, _1, _2, _3));
+		s.register_send_handle(boost::bind(&Session::onSend, this, _1));
+
+		s.async_recv(true);
 	}
 	~Session(){};
 
@@ -41,7 +44,7 @@ private:
 	unsigned int buff_llen;
 	
 public:
-	void onSend(char * buff, int llen, int err){
+	void onSend(int err){
 		if (!err){
 			Sendcount++; 
 		}else{
@@ -91,7 +94,7 @@ private:
 				_mu.unlock();
 				
 				if (s != 0){
-					s->s.async_send((char*)msg_, sizeof(msg), boost::bind(&Session::onSend, s, _1, _2, _3));
+					s->s.async_send((char*)msg_, sizeof(msg));
 				}
 			}
 
@@ -183,17 +186,30 @@ void dotest(){
 		_mu.unlock();
 				
 		if (s != 0){
-			s->s.async_send((char*)&msg, sizeof(msg), boost::bind(&Session::onSend, s, _1, _2, _3));
+			s->s.async_send((char*)&msg, sizeof(msg));
 		}
 	}
 }
 
 int main(){
 	angelica::async_net::async_service service;
-	service.start();
+	
+	struct run{
+		void operator()(boost::function<void(void) > run, boost::atomic_bool * _flag){
+			while (_flag){
+				run();
+			}
+		}
+	};
+	boost::atomic_bool _flag = true;
+
+	boost::function<void (boost::function<void(void) >, boost::atomic_bool *) > fn_run = run();
+	boost::function<void (void) > fn_void = boost::bind(&angelica::async_net::async_service::run, &service);
+
+	boost::thread th(boost::bind(fn_run, fn_void, &_flag));
 
 	angelica::async_net::socket s(service);
-	//s.register_accpet(&onAccpet);
+	s.register_accpet_handle(boost::bind(&onAccpet, _1, _2, _3));
 
 	char addr[32];
 	memset(addr, 0, 32);
@@ -202,7 +218,7 @@ int main(){
 	std::cout << addr << std::endl;
 
 	s.bind(sock_addr(addr, 3311));
-	s.async_accpet(100000, boost::bind(&onAccpet, _1, _2, _3), true);
+	s.async_accpet(100000, true);
 	
 	std::cout << "angelica async_net 性能测试 server" << std::endl;
 	std::cout << "输入r 重新测试" << std::endl;
@@ -215,7 +231,7 @@ int main(){
 
 		switch(in){
 		case 'r':
-			s.async_accpet(100000, boost::bind(&onAccpet, _1, _2, _3), false);
+			s.async_accpet(100000, false);
 			dotest();
 			break;
 		case 'q':
@@ -234,10 +250,11 @@ int main(){
 	}
 
 end:
-	s.async_accpet(100000, boost::bind(&onAccpet, _1, _2, _3), false);
+	s.async_accpet(false);
 	s.closesocket();
 
-	service.stop();
+	_flag = false;
+	//service.stop();
 
 	for(int i = 0; i < mapSocket.size(); i++){
 		delete mapSocket[i];

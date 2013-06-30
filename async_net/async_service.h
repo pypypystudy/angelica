@@ -7,6 +7,12 @@
 #ifndef _NET_SERVICE_H
 #define _NET_SERVICE_H
 
+#ifdef _WIN32
+#include "win32/winhdef.h"
+#elif __linux__ 
+//class socket_base_linux;
+#endif
+
 #include <boost/function.hpp>
 
 #include <angelica/container/swapque.h>
@@ -53,7 +59,7 @@ private:
 
 	boost::atomic_uint32_t thread_count;
 	
-	boost::atomic_ulong nConnect;
+	boost::uint32_t nConnect;
 	unsigned long nMaxConnect;
 
 	angelica::container::swapque<fnHandle > event_que;
